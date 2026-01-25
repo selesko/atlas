@@ -1,15 +1,24 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, SafeAreaView, StatusBar, Dimensions, PanResponder } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, SafeAreaView, StatusBar, Dimensions, PanResponder, Modal, Switch, Animated } from 'react-native';
 import Svg, { Circle, Polygon, G, Rect, Path, Defs, RadialGradient, Stop, Line, Text as SvgText } from 'react-native-svg';
-
+import { supabase } from './lib/supabase';
 const { width, height } = Dimensions.get('window');
 
+const HEADER_CONNECTED = 'SYSTEM ALIGNMENT // V1.0';
+const HEADER_FALLBACKS = ['SYSTEMS NOMINAL', 'ALL GREEN', 'STANDING BY', 'LOCAL MODE', 'OFFLINE — SYSTEMS STABLE', 'ALIGNMENT CHECK PENDING', 'SYSTEMS STABLE // LOCAL'];
+
+function pickHeaderFallback() {
+  return HEADER_FALLBACKS[Math.floor(Math.random() * HEADER_FALLBACKS.length)];
+}
+
 const THEME = {
-  bg: '#020617', card: '#0F172A', border: '#E2E8F0', accent: '#38BDF8', textDim: '#64748B',
-  mind: '#38BDF8', body: '#FB7185', home: '#A78BFA'
+  bg: '#152238', card: '#07101c', border: '#E2E8F0', accent: '#38BDF8', textDim: '#64748B',
+  mind: '#38BDF8', body: '#FB7185', home: '#A78BFA',
+  cardBorder: 'rgba(148,163,184,0.28)', glow: 'rgba(56,189,248,0.22)', glowPop: 'rgba(56,189,248,0.3)',
 };
 
 const NODE_COLORS = [THEME.mind, THEME.body, THEME.home, '#34D399', '#FBBF24', '#F472B6', '#60A5FA', '#10B981'];
+const DEFAULT_NODE_IDS = ['mind', 'body', 'home'];
 
 const INFO_TEXTS: Record<string, string> = {
   Atlas: 'The Atlas is your primary visualization of the balance between Mind, Body, and Home. This radar chart represents the current state of your system based on the coordinates you have manually set. A symmetrical shape indicates balance, while a pull toward one node highlights where your current focus should be concentrated.',
@@ -19,6 +28,14 @@ const INFO_TEXTS: Record<string, string> = {
 };
 
 const toCreatedAt = (daysAgo: number) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); return d.toISOString().slice(0, 10); };
+const MOTIVATOR_OPTIONS = ['DISCIPLINE', 'CREATIVITY', 'CONNECTION', 'AUTONOMY', 'MASTERY', 'VITALITY', 'ORDER', 'GROWTH', 'LEGACY'] as const;
+
+const MODEL_DESCRIPTIONS: Record<'Architect' | 'Strategist' | 'Builder' | 'Analyst', string> = {
+  Architect: 'a systems thinker who designs frameworks and structures to bring clarity and order to complex goals.',
+  Strategist: 'a forward-looking planner who connects today\'s actions to long-term outcomes and navigates uncertainty with intent.',
+  Builder: 'an execution-focused operator who turns ideas into reality through consistent action and incremental progress.',
+  Analyst: 'a pattern-seeking evaluator who optimizes decisions through evidence, reflection, and measured calibration.',
+};
 
 const INITIAL_DATA = [
   { id: 'mind', name: 'Mind', color: THEME.mind, description: 'CLARITY & FOCUS', goals: [{ id: 'm1', name: 'Meditation', value: 7, evidence: '', tasks: [{ id: 't1', title: '10m Focus Session', completed: true, timestamp: '09:42', isPriority: false, createdAt: toCreatedAt(3) }] }, { id: 'm2', name: 'Deep Work', value: 5, evidence: '', tasks: [] }] },
@@ -47,24 +64,158 @@ export default function App() {
   const [trajectoryDragX, setTrajectoryDragX] = useState<number | null>(null);
   const trajectoryChartWidthRef = useRef(0);
   const [constellationW, setConstellationW] = useState(width);
+  const [cognitiveModel, setCognitiveModel] = useState<'Architect' | 'Strategist' | 'Builder' | 'Analyst'>('Architect');
+  const [peakPeriod, setPeakPeriod] = useState<'MORNING' | 'EVENING'>('MORNING');
+  const [motivators, setMotivators] = useState<string[]>([]);
+  const [identityNotes, setIdentityNotes] = useState('');
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [coordEditAddTitle, setCoordEditAddTitle] = useState('');
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [systemAccessGateOpen, setSystemAccessGateOpen] = useState(false);
+  const [headerSubtitle, setHeaderSubtitle] = useState(pickHeaderFallback);
   const trajectoryPanResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: (e) => {
       const w = trajectoryChartWidthRef.current || 320;
       const lx = e.nativeEvent.locationX;
-      const vx = Math.max(40, Math.min(280, (lx / w) * 320));
+      const vx = Math.max(0, Math.min(320, (lx / w) * 320));
       setTrajectoryDragX(vx);
     },
     onPanResponderMove: (e) => {
       const w = trajectoryChartWidthRef.current || 320;
       const lx = e.nativeEvent.locationX;
-      const vx = Math.max(40, Math.min(280, (lx / w) * 320));
+      const vx = Math.max(0, Math.min(320, (lx / w) * 320));
       setTrajectoryDragX(vx);
     },
     onPanResponderRelease: () => setTrajectoryDragX(null),
   }), []);
+
+  const TABS = ['Atlas', 'Nodes', 'Tasks', 'Profile'] as const;
+  const swipeOffset = useRef(new Animated.Value(0)).current;
+
+  const swipePageResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponderCapture: (_, { dx, dy }) => Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.2,
+    onPanResponderGrant: () => { swipeOffset.setValue(0); },
+    onPanResponderMove: (_, { dx }) => {
+      const i = TABS.findIndex(t => t === activeTab);
+      let capped = dx;
+      if (i === 0 && dx > 0) capped = dx * 0.4;
+      else if (i === TABS.length - 1 && dx < 0) capped = dx * 0.4;
+      else capped = Math.max(-width * 0.4, Math.min(width * 0.4, dx));
+      swipeOffset.setValue(capped);
+    },
+    onPanResponderRelease: (_, { dx }) => {
+      const i = TABS.findIndex(t => t === activeTab);
+      if (i === -1) return;
+      if (dx > 60 && i > 0) {
+        Animated.timing(swipeOffset, { toValue: width, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+          if (finished) {
+            setActiveTab(TABS[i - 1]);
+            swipeOffset.setValue(-width);
+            Animated.timing(swipeOffset, { toValue: 0, duration: 220, useNativeDriver: true }).start();
+          }
+        });
+      } else if (dx < -60 && i < TABS.length - 1) {
+        Animated.timing(swipeOffset, { toValue: -width, duration: 220, useNativeDriver: true }).start(({ finished }) => {
+          if (finished) {
+            setActiveTab(TABS[i + 1]);
+            swipeOffset.setValue(width);
+            Animated.timing(swipeOffset, { toValue: 0, duration: 220, useNativeDriver: true }).start();
+          }
+        });
+      } else {
+        Animated.spring(swipeOffset, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+      }
+    },
+  }), [activeTab]);
+
   const trackWidths = useRef<Record<string, number>>({});
+
+  const copilotContent = useMemo(() => {
+    const getAvg = (node: any) => (node.goals.reduce((acc: number, g: any) => acc + g.value, 0) / (node.goals.length || 1));
+    const getAvgStr = (node: any) => getAvg(node).toFixed(1);
+    type Action = 'calibrate' | 'logEvidence' | 'prioritize' | 'deployTask';
+    type Line = { prefix: string; text: string };
+    let briefingLines: Line[] = [];
+    let suggest1: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: 'CALIBRATE NODE', action: 'calibrate', nodeId: nodes[0]?.id };
+    let suggest2: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: 'LOG EVIDENCE', action: 'logEvidence', nodeId: nodes[0]?.id, goalId: nodes[0]?.goals[0]?.id };
+
+    if (activeTab === 'Atlas' || activeTab === 'Nodes' || activeTab === 'Profile') {
+      const withAvg = nodes.map(n => ({ node: n, avg: getAvg(n) })).sort((a, b) => b.avg - a.avg);
+      const highest = withAvg[0];
+      const lowest = withAvg[withAvg.length - 1];
+      const delta = highest && lowest && highest.node.id !== lowest.node.id
+        ? (highest.avg - lowest.avg).toFixed(1)
+        : '0';
+      if (activeTab === 'Nodes') {
+        const needsCal: { n: any; g: any; v: number }[] = [];
+        const needEvidence: { n: any; g: any }[] = [];
+        nodes.forEach(n => {
+          n.goals.forEach((g: any) => {
+            if (g.value < 6) needsCal.push({ n, g, v: g.value });
+            if (!(g.evidence && String(g.evidence).trim())) needEvidence.push({ n, g });
+          });
+        });
+        if (needsCal.length) briefingLines.push({ prefix: '> STATUS:', text: `${needsCal.length} COORDINATE(S) BELOW 6 — ${needsCal.map(c => `${c.g.name.toUpperCase()} (${c.n.name.toUpperCase()}): ${c.v}`).join('; ')}.` });
+        if (needEvidence.length) briefingLines.push({ prefix: '> EVIDENCE REQUIRED:', text: `${needEvidence.length} COORDINATE(S) LACK EVIDENCE — ${needEvidence.slice(0, 3).map(e => `${e.g.name.toUpperCase()} (${e.n.name.toUpperCase()})`).join('; ')}.` });
+        if (briefingLines.length === 0) briefingLines = [{ prefix: '> STATUS:', text: 'ALL COORDINATES CALIBRATED. ALL EVIDENCE LOGGED.' }];
+      } else if (activeTab === 'Profile') {
+        briefingLines = [{ prefix: '> STATUS:', text: `${cognitiveModel.toUpperCase()} ARCHETYPE. PEAK PERIOD ${peakPeriod}. ${motivators.length ? `MOTIVATORS: ${motivators.slice(0, 3).join(', ')}.` : 'SET MOTIVATORS FOR ALIGNMENT.'}` }];
+      } else {
+        if (highest && lowest && delta !== '0') {
+          briefingLines = [
+            { prefix: '> STATUS:', text: `THE ATLAS IS WEIGHTED TOWARD ${highest.node.name.toUpperCase()} (${getAvgStr(highest.node)}).` },
+            { prefix: '> ALERT:', text: `${lowest.node.name.toUpperCase()} (${getAvgStr(lowest.node)}) TRAILING BY ${delta} POINTS, STRUCTURAL DRIFT.` },
+          ];
+        } else if (withAvg.length) {
+          const n = withAvg[0];
+          briefingLines = [{ prefix: '> STATUS:', text: `THE ATLAS SHOWS UNIFORM WEIGHTS. ${n.node.name.toUpperCase()} LEADS AT ${getAvgStr(n.node)}.` }];
+        } else {
+          briefingLines = [{ prefix: '> STATUS:', text: 'NO NODES DEFINED. ADD NODES TO BUILD THE ATLAS.' }];
+        }
+      }
+      suggest1 = { label: `CALIBRATE ${lowest?.node.name.toUpperCase() || 'NODE'} NODE (+${delta})`, action: 'calibrate', nodeId: lowest?.node.id };
+      const goalForEvidence = highest?.node.goals.find((g: any) => !(g.evidence && String(g.evidence).trim())) || highest?.node.goals[0];
+      suggest2 = { label: `LOG EVIDENCE FOR ${highest?.node.name.toUpperCase() || 'NODE'}`, action: 'logEvidence', nodeId: highest?.node.id, goalId: goalForEvidence?.id };
+    } else if (activeTab === 'Tasks') {
+      const allTasks: any[] = [];
+      nodes.forEach(n => n.goals.forEach((g: any) => (g.tasks || []).forEach((t: any) => allTasks.push({ ...t, nodeId: n.id, goalId: g.id, goalName: g.name }))));
+      const completed = allTasks.filter(t => t.completed).length;
+      const pending = allTasks.filter(t => !t.completed).length;
+      const byCoord: Record<string, { nodeId: string; goalId: string; goalName: string; pending: number }> = {};
+      nodes.forEach(n => n.goals.forEach((g: any) => {
+        const p = (g.tasks || []).filter((t: any) => !t.completed).length;
+        if (p > 0) { const k = `${n.id}-${g.id}`; if (!byCoord[k] || p > byCoord[k].pending) byCoord[k] = { nodeId: n.id, goalId: g.id, goalName: g.name, pending: p }; }
+      }));
+      const topCoord = Object.values(byCoord).sort((a, b) => b.pending - a.pending)[0];
+      const withAvg = nodes.map(n => ({ node: n, avg: (n.goals.reduce((acc: number, g: any) => acc + g.value, 0) / (n.goals.length || 1)) })).sort((a, b) => a.avg - b.avg);
+      const needsNode = withAvg[0]?.node;
+      briefingLines = [
+        { prefix: '> STATUS:', text: `DAILY VELOCITY — ${completed} COMPLETED, ${pending} PENDING.` },
+        { prefix: topCoord ? '> ALERT:' : '> STATUS:', text: topCoord ? `${topCoord.goalName.toUpperCase()} HAS HIGHEST PENDING LOAD (${topCoord.pending} TASKS).` : 'NO PENDING TASKS.' },
+      ];
+      suggest1 = { label: topCoord ? `PRIORITIZE ${topCoord.goalName.toUpperCase()} COORDINATE` : 'PRIORITIZE COORDINATE', action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId };
+      suggest2 = { label: `DEPLOY NEW TASK FOR ${needsNode?.name.toUpperCase() || 'MIND'}`, action: 'deployTask', nodeId: needsNode?.id, goalId: needsNode?.goals[0]?.id };
+    }
+
+    return { briefingLines, suggest1, suggest2 };
+  }, [activeTab, nodes, cognitiveModel, peakPeriod, motivators]);
+
+  const briefingHighlight = useMemo(() => {
+    const wordToColor: Record<string, string> = { EVIDENCE: '#22D3EE' };
+    const canon = (n: any) => (n.id === 'mind' || (n.name || '').toLowerCase() === 'mind') ? '#22D3EE' : (n.id === 'body' || (n.name || '').toLowerCase() === 'body') ? '#FB7185' : (n.id === 'home' || (n.name || '').toLowerCase() === 'home') ? '#A78BFA' : (n.color || THEME.border);
+    nodes.forEach((n: any) => {
+      wordToColor[(n.name || '').toUpperCase()] = canon(n);
+      (n.goals || []).forEach((g: any) => { wordToColor[(g.name || '').toUpperCase()] = canon(n); });
+    });
+    const keywords = Object.keys(wordToColor).filter(Boolean).sort((a, b) => b.length - a.length);
+    const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const re = new RegExp(`(\\d+\\.?\\d*|${escaped.join('|')})`, 'gi');
+    return { wordToColor, re };
+  }, [nodes]);
 
   const STARFIELD_HEIGHT = 240;
   useEffect(() => {
@@ -155,14 +306,32 @@ export default function App() {
 
   const getNodeAvg = (node: any) => (node.goals.reduce((acc: number, g: any) => acc + g.value, 0) / node.goals.length).toFixed(1);
 
+  useEffect(() => { if (!editingCoordinate) setCoordEditAddTitle(''); }, [editingCoordinate]);
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        await supabase.auth.getSession();
+        if (mounted) setHeaderSubtitle(HEADER_CONNECTED);
+      } catch {
+        if (mounted) setHeaderSubtitle(prev => prev === HEADER_CONNECTED ? pickHeaderFallback() : prev);
+      }
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <Animated.View style={{ flex: 1, transform: [{ translateX: swipeOffset }] }} {...swipePageResponder.panHandlers}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>{activeTab.toUpperCase()}</Text>
-            <Text style={styles.headerSubtitle}>SYSTEM ALIGNMENT // V1.0</Text>
+            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
           </View>
           <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setInfoOpen(true)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Svg width={20} height={20} viewBox="0 0 24 24">
@@ -175,6 +344,14 @@ export default function App() {
 
         {activeTab === 'Atlas' && (() => {
           const systemBalance = (nodes.reduce((acc, n) => acc + parseFloat(getNodeAvg(n)), 0) / (nodes.length || 1)).toFixed(1);
+          const withAvg = nodes.map(n => ({ node: n, avg: parseFloat(getNodeAvg(n)) })).sort((a, b) => b.avg - a.avg);
+          const highest = withAvg[0];
+          const lowest = withAvg[withAvg.length - 1];
+          const driftDelta = highest && lowest && highest.node.id !== lowest.node.id ? (highest.avg - lowest.avg).toFixed(1) : '0';
+          const needsCal = nodes.reduce((a, n) => a + (n.goals || []).filter((g: any) => g.value < 6).length, 0);
+          const needEvidence = nodes.reduce((a, n) => a + (n.goals || []).filter((g: any) => !(g.evidence && String(g.evidence).trim())).length, 0);
+          const totalCoords = nodes.reduce((a, n) => a + (n.goals || []).length, 0);
+          const systemStatus = parseFloat(systemBalance) >= 8 ? 'OPTIMIZED' : parseFloat(systemBalance) >= 5 ? 'NOMINAL' : 'CRITICAL DRIFT';
           const getTierForNode = (node: any) => {
             if (node.id === 'mind') return 0;
             if (node.id === 'body') return 1;
@@ -184,7 +361,7 @@ export default function App() {
             if (node.color === THEME.home) return 2;
             return 1;
           };
-          const trajectoryX = (i: number) => 40 + (i / 6) * 240;
+          const trajectoryX = (i: number) => (i / 6) * 320;
           const TRAJ_CHART_H = 156;
           const TRAJ_PLOT_H = 196;
           const trajectoryY = (v: number) => 24 + (1 - v / 10) * TRAJ_CHART_H;
@@ -195,20 +372,14 @@ export default function App() {
           });
           const averageData = [0, 1, 2, 3, 4, 5, 6].map(i => trajectoryDataPerNode.reduce((s, arr) => s + arr[i], 0) / (nodes.length || 1));
           const interpolatedAvg = (x: number) => {
-            if (x <= 40) return averageData[0];
-            if (x >= 280) return averageData[6];
-            const i = (x - 40) / 40;
+            if (x <= 0) return averageData[0];
+            if (x >= 320) return averageData[6];
+            const i = (x / 320) * 6;
             const i0 = Math.floor(i);
             const i1 = Math.min(i0 + 1, 6);
             const f = i - i0;
             return averageData[i0] * (1 - f) + averageData[i1] * f;
           };
-          const now = new Date();
-          const dayLabels = [...Array(7)].map((_, i) => {
-            const d = new Date(now);
-            d.setDate(d.getDate() - (6 - i));
-            return i === 6 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }).replace('Thu', 'Thur');
-          });
           const displayValue = (atlasGraphView === 'trajectory' && trajectoryDragX != null) ? interpolatedAvg(trajectoryDragX).toFixed(1) : systemBalance;
           const zoneYMin = [24, 96, 168] as const;   // MIND 10–30%, BODY 40–60%, HOME 70–90%
           const zoneH = 48;
@@ -235,6 +406,7 @@ export default function App() {
           };
           const sequence7 = getLast7SequenceNodes();
           return (
+          <>
           <View style={styles.atlasCard}>
             <View style={styles.atlasCardContent}>
               <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow]}>
@@ -344,16 +516,14 @@ export default function App() {
                               <Circle cx={trajectoryDragX} cy={trajectoryY(interpolatedAvg(trajectoryDragX))} r={4} fill="#FFFFFF" />
                             </>
                           )}
+                          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                            <Line key={i} x1={(i / 6) * 320} y1={182} x2={(i / 6) * 320} y2={196} stroke={THEME.textDim} strokeWidth={0.5} opacity={0.6} />
+                          ))}
                         </Svg>
                       </View>
                     </View>
-                    <View style={styles.trajectoryDaysLegend}>
-                      {dayLabels.map((l, i) => (
-                        <View key={i} style={styles.trajectoryDayItem}>
-                          <View style={[styles.trajectoryDayDot, { backgroundColor: THEME.textDim }]} />
-                          <Text style={styles.trajectoryDayLabel}>{l}</Text>
-                        </View>
-                      ))}
+                    <View style={styles.trajectoryPastLogsRow}>
+                      <Text style={styles.trajectoryPastLogsLabel}>PAST LOGS</Text>
                     </View>
                   </>
                 )}
@@ -400,80 +570,114 @@ export default function App() {
               )}
             </View>
           </View>
+          <View style={styles.systemBriefingCard}>
+            <View style={styles.systemBriefingHeader}>
+              <Text style={styles.systemBriefingTitle}>SYSTEM STATUS BRIEFING</Text>
+            </View>
+            <View style={styles.systemBriefingPrimary}>
+              <View>
+                <Text style={styles.systemBriefingLabel}>AVERAGE INTENSITY</Text>
+                <Text style={styles.systemBriefingIntensity}>{systemBalance}</Text>
+              </View>
+              <View style={styles.systemBriefingStatusWrap}>
+                <Text style={styles.systemBriefingLabel}>SYSTEM STATUS</Text>
+                <Text style={[styles.systemBriefingStatusBadge, systemStatus === 'OPTIMIZED' && styles.systemBriefingStatusOpt, systemStatus === 'NOMINAL' && styles.systemBriefingStatusNom, systemStatus === 'CRITICAL DRIFT' && styles.systemBriefingStatusCrit]}>{systemStatus}</Text>
+              </View>
+            </View>
+            <View style={styles.systemBriefingDivider} />
+            <View style={styles.systemBriefingRow}>
+              <Text style={styles.systemBriefingMetaLabel}>LEADING</Text>
+              <Text style={[styles.systemBriefingMetaValue, highest && { color: highest.node.color }]}>{highest ? `${highest.node.name.toUpperCase()} (${getNodeAvg(highest.node)})` : '—'}</Text>
+            </View>
+            <View style={styles.systemBriefingRow}>
+              <Text style={styles.systemBriefingMetaLabel}>TRAILING</Text>
+              <Text style={[styles.systemBriefingMetaValue, lowest && { color: lowest.node.color }]}>{lowest ? `${lowest.node.name.toUpperCase()} (${getNodeAvg(lowest.node)})` : '—'}</Text>
+            </View>
+            <View style={styles.systemBriefingRow}>
+              <Text style={styles.systemBriefingMetaLabel}>STRUCTURAL DRIFT</Text>
+              <Text style={styles.systemBriefingMetaValue}>{driftDelta === '0' ? 'BALANCED' : `${driftDelta} PT(S)`}</Text>
+            </View>
+            <View style={styles.systemBriefingDivider} />
+            <View style={styles.systemBriefingRow}>
+              <Text style={styles.systemBriefingMetaLabel}>FOOTPRINT</Text>
+              <Text style={styles.systemBriefingMetaValue}>{nodes.length} NODES · {totalCoords} COORDINATES</Text>
+            </View>
+            {needsCal > 0 && (
+              <View style={styles.systemBriefingAlert}>
+                <Text style={styles.systemBriefingAlertText}>› {needsCal} COORDINATE(S) BELOW 6 — CALIBRATION RECOMMENDED</Text>
+              </View>
+            )}
+            {needEvidence > 0 && (
+              <View style={styles.systemBriefingAlert}>
+                <Text style={styles.systemBriefingAlertText}>› {needEvidence} COORDINATE(S) LACK EVIDENCE — LOG EVIDENCE</Text>
+              </View>
+            )}
+          </View>
+          </>
           );
         })()}
 
         {activeTab === 'Nodes' && (
           <View>
-            {selectedNodeId ? (
-              (() => {
-                const selectedNode = nodes.find(n => n.id === selectedNodeId);
-                if (!selectedNode) return null;
-                return (
-                  <View>
-                    <TouchableOpacity style={styles.backRow} onPress={() => { setEditingCoordinate(null); setSelectedNodeId(null); }} activeOpacity={0.7}>
-                      <Text style={styles.backText}>‹ BACK</Text>
-                    </TouchableOpacity>
-                    <View style={styles.nodeDrillDown}>
-                      <View style={styles.nodeHeader}>
-                        <View style={styles.nodeHeaderLeft}>
-                          <View style={[styles.nodeIcon, { backgroundColor: selectedNode.color }]}>
-                            <Text style={styles.nodeIconLetter}>{selectedNode.name[0].toUpperCase()}</Text>
-                          </View>
-                          <View>
-                            <Text style={[styles.nodeTitle, { color: selectedNode.color }]}>{selectedNode.name.toUpperCase()}</Text>
-                            <Text style={styles.nodeDirective}>{selectedNode.description}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.nodeScore}>{getNodeAvg(selectedNode)}</Text>
+            <TouchableOpacity style={[styles.addCoordinateBtn, { marginTop: 0, marginBottom: 16 }]} onPress={() => { if (!hasAccess) { setSystemAccessGateOpen(true); return; } setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); setAddNodeOpen(true); }} activeOpacity={0.7}>
+              <Text style={styles.addCoordinateText}>+ ADD NODE</Text>
+            </TouchableOpacity>
+            {nodes.map(node => (
+              <View key={node.id} style={styles.nodeBlock}>
+                <TouchableOpacity onPress={() => setSelectedNodeId(prev => prev === node.id ? null : node.id)} activeOpacity={0.9}>
+                  <View style={styles.nodeHeader}>
+                    <View style={styles.nodeHeaderLeft}>
+                      <View style={[styles.nodeIcon, { backgroundColor: node.color }]}>
+                        <Text style={styles.nodeIconLetter}>{node.name[0].toUpperCase()}</Text>
                       </View>
-                      <View style={styles.nodeExpanded}>
-                        <View style={styles.divider} />
-                        <Text style={styles.coordinatesLabel}>ACTIVE COORDINATES</Text>
-                        {selectedNode.goals.map(goal => (
-                          <TouchableOpacity key={goal.id} style={styles.goalBlock} onPress={() => setEditingCoordinate({ nodeId: selectedNode.id, goalId: goal.id })} activeOpacity={0.9}>
-                            <Text style={styles.goalName}>{goal.name}</Text>
-                            <View style={styles.goalValueRow}>
-                              <View style={[styles.goalValueBadge, { borderColor: selectedNode.color }]}>
-                                <Text style={[styles.goalValueText, { color: selectedNode.color }]}>{goal.value}</Text>
-                              </View>
-                              <Text style={styles.calibrationLabel}>{goal.value < 6 ? 'CALIBRATION REQUIRED' : 'SYSTEM ALIGNED'}</Text>
-                            </View>
-                            <Text style={styles.evidenceLabel}>INPUT EVIDENCE...</Text>
-                            <Text style={styles.evidencePreview} numberOfLines={1}>{goal.evidence || '—'}</Text>
-                          </TouchableOpacity>
-                        ))}
-                        <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => addCoordinate(selectedNode.id)} activeOpacity={0.7}>
-                          <Text style={styles.addCoordinateText}>+ ADD COORDINATE</Text>
-                        </TouchableOpacity>
+                      <View>
+                        <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
+                        <Text style={styles.nodeDirective}>{node.description}</Text>
                       </View>
                     </View>
+                    <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
                   </View>
-                );
-              })()
-            ) : (
-              <View>
-                {nodes.map(node => (
-                  <TouchableOpacity key={node.id} style={styles.nodeBlock} onPress={() => setSelectedNodeId(node.id)} activeOpacity={0.9}>
-                    <View style={styles.nodeHeader}>
-                      <View style={styles.nodeHeaderLeft}>
-                        <View style={[styles.nodeIcon, { backgroundColor: node.color }]}>
-                          <Text style={styles.nodeIconLetter}>{node.name[0].toUpperCase()}</Text>
-                        </View>
-                        <View>
-                          <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
-                          <Text style={styles.nodeDirective}>{node.description}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => { setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); setAddNodeOpen(true); }} activeOpacity={0.7}>
-                  <Text style={styles.addCoordinateText}>+ ADD NODE</Text>
                 </TouchableOpacity>
+                {selectedNodeId === node.id && (
+                  <View style={styles.nodeExpanded}>
+                    <View style={styles.divider} />
+                    <Text style={styles.coordinatesLabel}>ACTIVE COORDINATES</Text>
+                    {node.goals.map(goal => {
+                      const key = `${node.id}-${goal.id}`;
+                      const applySlider = (evt: { nativeEvent: { locationX: number } }) => {
+                        const w = trackWidths.current[key] || width - 40;
+                        if (w <= 0) return;
+                        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+                        const val = Math.round((x / w) * 9) + 1;
+                        updateValue(node.id, goal.id, Math.max(1, Math.min(10, val)));
+                      };
+                      const pan = PanResponder.create({ onStartShouldSetPanResponder: () => true, onPanResponderGrant: applySlider, onPanResponderMove: applySlider });
+                      return (
+                        <View key={goal.id} style={styles.nodeOverlayCoord}>
+                          <View style={styles.nodeOverlayCoordTitleRow}>
+                            <Text style={styles.goalName}>{goal.name}</Text>
+                            <TouchableOpacity onPress={() => setEditingCoordinate({ nodeId: node.id, goalId: goal.id })} activeOpacity={0.8}>
+                              <Text style={styles.editCoordBtn}>Edit</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={styles.sliderRow}>
+                            <View style={styles.sliderTrack} onLayout={(e) => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
+                              <View style={styles.sliderLine} />
+                              <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
+                              <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}><View style={styles.sliderHandleInner} /></View>
+                            </View>
+                            <View style={styles.valueCircle}><Text style={[styles.valueCircleText, { color: node.color }]}>{goal.value}</Text></View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                    <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => { if (!hasAccess && node.goals.length >= 2) { setSystemAccessGateOpen(true); return; } addCoordinate(node.id); }} activeOpacity={0.7}>
+                      <Text style={styles.addCoordinateText}>+ ADD COORDINATE</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            )}
+            ))}
           </View>
         )}
 
@@ -630,16 +834,133 @@ export default function App() {
         )}
 
         {activeTab === 'Profile' && (
-          <View style={styles.profileBox}>
-             <Text style={styles.sectionLabel}>ARCHETYPE MODE</Text>
-             <View style={styles.pillContainer}>
-                {['Architect', 'Nomad', 'Guardian'].map(p => (
-                  <View key={p} style={[styles.pill, p === 'Architect' && styles.pillActive]}><Text style={[styles.pillText, p === 'Architect' && styles.pillTextActive]}>{p}</Text></View>
-                ))}
-             </View>
+          <View>
+            <View style={styles.profileCard}>
+              <View style={styles.profileSectionHeaderRow}>
+                <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+                  <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <Circle cx="12" cy="7" r="4" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
+                </Svg>
+                <Text style={styles.profileSectionLabel}>MODEL SELECTION</Text>
+              </View>
+              <View style={styles.modelDropdownWrap}>
+                <TouchableOpacity style={styles.modelDropdownTrigger} onPress={() => setModelDropdownOpen(v => !v)} activeOpacity={0.8}>
+                  <Text style={styles.modelDropdownTriggerText} numberOfLines={1}>{cognitiveModel}</Text>
+                  <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.modelDropdownChevron}>
+                    <Path fill={THEME.textDim} d="M7 10l5 5 5-5H7z" />
+                  </Svg>
+                </TouchableOpacity>
+                {modelDropdownOpen && (
+                  <View style={styles.modelDropdownList}>
+                    {(['Architect', 'Strategist', 'Builder', 'Analyst'] as const).map(m => (
+                      <TouchableOpacity key={m} style={[styles.modelDropdownItem, cognitiveModel === m && styles.modelDropdownItemActive]} onPress={() => { setCognitiveModel(m); setModelDropdownOpen(false); }} activeOpacity={0.8}>
+                        <Text style={[styles.modelDropdownItemText, cognitiveModel === m && styles.modelDropdownItemTextActive]}>{m}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+              <View style={styles.modelYouAreBlock}>
+                <Text style={styles.modelYouAreLabel}>YOU ARE...</Text>
+                <Text style={styles.modelYouAreText}>{MODEL_DESCRIPTIONS[cognitiveModel]}</Text>
+              </View>
+            </View>
+            <View style={styles.profileCard}>
+              <View style={styles.profileSectionHeaderRow}>
+                <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+                  <Circle cx="12" cy="12" r="5" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
+                  <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M12 2v2M12 20v2M4 12H2M22 12h-2M6.34 6.34l1.42-1.42M16.24 16.24l1.42-1.42M6.34 17.66l-1.42-1.42M16.24 7.76l-1.42-1.42" />
+                </Svg>
+                <Text style={styles.profileSectionLabel}>PEAK PERIOD</Text>
+              </View>
+              <View style={styles.peakPeriodRow}>
+                <TouchableOpacity
+                  style={[styles.peakBlock, peakPeriod === 'MORNING' && styles.peakBlockActiveMorning]}
+                  onPress={() => setPeakPeriod('MORNING')}
+                  activeOpacity={0.9}
+                >
+                  <Svg width={16} height={16} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
+                    <Circle cx="12" cy="12" r="5" fill="none" stroke={peakPeriod === 'MORNING' ? '#EAB308' : THEME.textDim} strokeWidth={1.5} />
+                    <Path fill="none" stroke={peakPeriod === 'MORNING' ? '#EAB308' : THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M12 2v2M12 20v2M4 12H2M22 12h-2M6.34 6.34l1.42-1.42M16.24 16.24l1.42-1.42M6.34 17.66l-1.42-1.42M16.24 7.76l-1.42-1.42" />
+                  </Svg>
+                  <View>
+                    <Text style={[styles.peakBlockTitle, peakPeriod === 'MORNING' && styles.peakBlockTitleActiveMorning]}>MORNING</Text>
+                    <Text style={[styles.peakBlockSub, peakPeriod === 'MORNING' && styles.peakBlockSubActiveMorning]}>0600-1200</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.peakBlock, peakPeriod === 'EVENING' && styles.peakBlockActiveEvening]}
+                  onPress={() => setPeakPeriod('EVENING')}
+                  activeOpacity={0.9}
+                >
+                  <Svg width={16} height={16} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
+                    <Path fill="none" stroke={peakPeriod === 'EVENING' ? '#F97316' : THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </Svg>
+                  <View>
+                    <Text style={[styles.peakBlockTitle, peakPeriod === 'EVENING' && styles.peakBlockTitleActiveEvening]}>EVENING</Text>
+                    <Text style={[styles.peakBlockSub, peakPeriod === 'EVENING' && styles.peakBlockSubActiveEvening]}>1800-0000</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.profileCard}>
+              <View style={[styles.profileSectionHeaderRow, { justifyContent: 'space-between', marginBottom: 12 }]}>
+                <View style={styles.profileSectionHeaderRow}>
+                  <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+                    <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </Svg>
+                  <Text style={styles.profileSectionLabel}>MOTIVATORS</Text>
+                </View>
+                <Text style={styles.motivatorsCounter}>{motivators.length}/3 SELECTED</Text>
+              </View>
+              <View style={styles.motivatorsGrid}>
+                {MOTIVATOR_OPTIONS.map(m => {
+                  const sel = motivators.includes(m);
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.motivatorChip, sel && styles.motivatorChipActive]}
+                      onPress={() => {
+                        if (sel) setMotivators(prev => prev.filter(x => x !== m));
+                        else if (motivators.length < 3) setMotivators(prev => [...prev, m]);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.motivatorChipText, sel && styles.motivatorChipTextActive]}>{m}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.profileCard}>
+              <View style={styles.profileSectionHeaderRow}>
+                <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+                  <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                </Svg>
+                <Text style={styles.profileSectionLabel}>IDENTITY NOTES</Text>
+              </View>
+              <TextInput
+                style={styles.profileTextArea}
+                value={identityNotes}
+                onChangeText={setIdentityNotes}
+                placeholder="Input analytical context"
+                placeholderTextColor={THEME.textDim}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
+            <View style={styles.devOverrideSection}>
+              <Text style={styles.devOverrideLabel}>DEVELOPER OVERRIDE</Text>
+              <View style={styles.devOverrideRow}>
+                <Text style={styles.systemAccessTier}>hasAccess</Text>
+                <Switch value={hasAccess} onValueChange={(v) => { setHasAccess(v); if (v) setSystemAccessGateOpen(false); }} trackColor={{ false: '#334155', true: THEME.accent }} thumbColor="#E2E8F0" />
+              </View>
+            </View>
           </View>
         )}
       </ScrollView>
+      </Animated.View>
       <View style={styles.nav}>
         {['Atlas', 'Nodes', 'Tasks', 'Profile'].map(t => {
           const active = activeTab === t;
@@ -683,6 +1004,15 @@ export default function App() {
           );
         })}
       </View>
+      <TouchableOpacity style={[styles.copilotFab, !hasAccess && styles.copilotFabLocked]} onPress={() => hasAccess ? setCopilotOpen(true) : setSystemAccessGateOpen(true)} activeOpacity={0.8}>
+        <View style={styles.copilotContainer}>
+          <Svg width={48} height={48} viewBox="0 0 48 48">
+            <Circle cx={24} cy={24} r={10.5} fill={hasAccess ? '#FFFFFF' : '#94A3B8'} />
+            <Circle cx={24} cy={24} r={22.5} fill="none" stroke={hasAccess ? '#FFFFFF' : '#94A3B8'} strokeWidth={1} />
+            <Circle cx={40} cy={8} r={3.375} fill={hasAccess ? '#FFFFFF' : '#94A3B8'} />
+          </Svg>
+        </View>
+      </TouchableOpacity>
       {infoOpen && (
         <View style={styles.infoOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setInfoOpen(false)} activeOpacity={1} />
@@ -735,25 +1065,58 @@ export default function App() {
           updateValue(node.id, goal.id, Math.max(1, Math.min(10, val)));
         };
         const pan = PanResponder.create({ onStartShouldSetPanResponder: () => true, onPanResponderGrant: applySliderValue, onPanResponderMove: applySliderValue });
+        const tasks = goal.tasks || [];
         return (
           <View style={styles.infoOverlay} pointerEvents="box-none">
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingCoordinate(null)} activeOpacity={1} />
-            <View style={styles.coordinateEditCard} pointerEvents="auto">
-              <Text style={styles.editFormLabel}>NAME</Text>
-              <TextInput style={styles.editFormInput} value={goal.name} onChangeText={(t) => updateGoal(node.id, goal.id, { name: t })} placeholderTextColor={THEME.textDim} />
-              <Text style={styles.calibrationLabel}>{goal.value < 6 ? 'CALIBRATION REQUIRED' : 'SYSTEM ALIGNED'}</Text>
-              <View style={styles.sliderRow}>
-                <View style={styles.sliderTrack} onLayout={(e) => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
-                  <View style={styles.sliderLine} />
-                  <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
-                  <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}><View style={styles.sliderHandleInner} /></View>
+            <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
+              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                <Text style={styles.editFormLabel}>NAME</Text>
+                <TextInput style={styles.coordEditNameInput} value={goal.name} onChangeText={(t) => updateGoal(node.id, goal.id, { name: t })} placeholderTextColor="#475569" />
+                <Text style={styles.calibrationLabel}>COORDINATE INTENSITY</Text>
+                <View style={styles.sliderRow}>
+                  <View style={styles.coordEditSliderTrack} onLayout={(e) => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
+                    <View style={styles.coordEditSliderLine} />
+                    <View pointerEvents="none" style={[styles.coordEditSliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
+                    <View pointerEvents="none" style={[styles.sliderHandle, styles.coordEditSliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6, top: 2 }]}><View style={styles.sliderHandleInner} /></View>
+                  </View>
+                  <View style={styles.valueCircle}><Text style={[styles.valueCircleText, { color: node.color }]}>{goal.value}</Text></View>
                 </View>
-                <View style={styles.valueCircle}><Text style={[styles.valueCircleText, { color: node.color }]}>{goal.value}</Text></View>
-              </View>
-              <Text style={styles.evidenceLabel}>INPUT EVIDENCE...</Text>
-              <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={goal.evidence || ''} onChangeText={(t) => updateGoal(node.id, goal.id, { evidence: t })} placeholder="Log reflection..." placeholderTextColor="#64748B" />
-              <TouchableOpacity style={[styles.addTaskSubmit, { alignSelf: 'flex-end' }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
-                <Text style={styles.addTaskSubmitText}>DONE</Text>
+                <Text style={styles.evidenceLabel}>ADD REFLECTION</Text>
+                <TextInput style={styles.coordEditEvidenceInput} value={goal.evidence || ''} onChangeText={(t) => updateGoal(node.id, goal.id, { evidence: t })} placeholder="INPUT EVIDENCE..." placeholderTextColor="#475569" />
+                <Text style={styles.evidenceLabel}>TASKS</Text>
+                {tasks.length === 0 ? (
+                  <Text style={[styles.evidencePreview, { marginBottom: 8 }]}>No tasks yet</Text>
+                ) : (
+                  tasks.map((t: any) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={styles.coordEditTaskRow}
+                      onPress={() => { setEditForm({ title: t.title, nodeId: node.id, goalId: goal.id, isPriority: !!(t.isPriority), notes: t.notes || '', dueDate: t.dueDate || '', reminder: t.reminder || '' }); setEditingTask({ nodeId: node.id, goalId: goal.id, taskId: t.id }); setEditingCoordinate(null); }}
+                      activeOpacity={0.8}
+                    >
+                      <TouchableOpacity onPress={() => toggleTask(node.id, goal.id, t.id)} style={{ padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Svg width={20} height={20} viewBox="0 0 24 24">
+                          {t.completed ? (
+                            <><Circle cx="12" cy="12" r="10" fill={node.color} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
+                          ) : (
+                            <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth="1.5" />
+                          )}
+                        </Svg>
+                      </TouchableOpacity>
+                      <Text style={[styles.coordEditTaskTitle, t.completed && styles.taskTitleStrike, t.completed && { opacity: 0.6 }]} numberOfLines={1}>{t.title}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+                <View style={styles.coordEditAddTaskRow}>
+                  <TextInput style={styles.coordEditAddTaskInput} value={coordEditAddTitle} onChangeText={setCoordEditAddTitle} placeholder="Task title…" placeholderTextColor="#475569" />
+                  <TouchableOpacity style={styles.coordEditAddTaskBtn} onPress={() => { const t = coordEditAddTitle.trim(); if (t) { addTask(node.id, goal.id, t); setCoordEditAddTitle(''); } }} activeOpacity={0.7}>
+                    <Text style={styles.addCoordinateText}>+ ADD TASK</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+              <TouchableOpacity style={[styles.coordEditDoneBtn, { alignSelf: 'flex-end', marginTop: 8 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
+                <Text style={styles.coordEditDoneText}>DONE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -818,6 +1181,95 @@ export default function App() {
           </View>
         </View>
       )}
+      <Modal visible={copilotOpen} animationType="fade" transparent>
+        <View style={styles.copilotOverlay} pointerEvents="box-none">
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCopilotOpen(false)} activeOpacity={1} />
+          <View style={styles.copilotCard} pointerEvents="auto">
+            <View style={styles.copilotCardHeader}>
+              <Text style={styles.copilotTitle}>CO-PILOT // V1.0</Text>
+              <TouchableOpacity onPress={() => setCopilotOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+                <Text style={styles.copilotCloseX}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.copilotHeading, { marginTop: 0 }]}>BRIEFING</Text>
+            {copilotContent.briefingLines.map((line, lineIdx) => {
+              const parts = line.text.split(briefingHighlight.re).filter(Boolean);
+              return (
+                <View key={lineIdx} style={styles.copilotBriefingLine}>
+                  <Text style={styles.copilotBriefingPrefix}>{line.prefix} </Text>
+                  <Text style={styles.copilotBriefingBody}>
+                    {parts.map((part, i) => {
+                      if (/^\d+\.?\d*$/.test(part)) {
+                        return <Text key={i} style={styles.copilotBriefingNum}>{part}</Text>;
+                      }
+                      const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                      if (col) {
+                        return <Text key={i} style={{ color: col }}>{part}</Text>;
+                      }
+                      return <Text key={i}>{part}</Text>;
+                    })}
+                  </Text>
+                </View>
+              );
+            })}
+            <Text style={styles.copilotHeading}>SUGGESTIONS</Text>
+            <TouchableOpacity
+              style={styles.copilotSuggestionBtn}
+              onPress={() => {
+                setCopilotOpen(false);
+                const s = copilotContent.suggest1;
+                if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
+                else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+                else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+                else if (s.action === 'deployTask') {
+                  const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId } : (nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : { nodeId: '', goalId: '' });
+                  if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskTitle(''); setAddTaskCoordDropdownOpen(false); setAddTaskOpen(true); }
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.copilotSuggestionBtnText}>{copilotContent.suggest1.label}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.copilotSuggestionBtn}
+              onPress={() => {
+                setCopilotOpen(false);
+                const s = copilotContent.suggest2;
+                if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
+                else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+                else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+                else if (s.action === 'deployTask') {
+                  const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId } : (nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : { nodeId: '', goalId: '' });
+                  if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskTitle(''); setAddTaskCoordDropdownOpen(false); setAddTaskOpen(true); }
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.copilotSuggestionBtnText}>{copilotContent.suggest2.label}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={systemAccessGateOpen} animationType="fade" transparent>
+        <View style={styles.systemAccessOverlay} pointerEvents="box-none">
+          <View style={styles.systemAccessCard} pointerEvents="auto">
+            <Text style={styles.systemAccessTitle}>SYSTEM ACCESS CLEARANCE</Text>
+            <Text style={styles.systemAccessFeature}>• AI CO-PILOT SUPPORT</Text>
+            <Text style={styles.systemAccessFeature}>• UNLIMITED CUSTOM NODES</Text>
+            <Text style={styles.systemAccessFeature}>• UNLIMITED COORDINATES PER NODE</Text>
+            <View style={styles.systemAccessTiers}>
+              <Text style={styles.systemAccessTier}>BASIC (FREE)</Text>
+              <Text style={styles.systemAccessTier}>UNRESTRICTED ($9.99/MO)</Text>
+            </View>
+            <TouchableOpacity style={styles.systemAccessBtnPrimary} onPress={() => { setHasAccess(true); setSystemAccessGateOpen(false); }} activeOpacity={0.8}>
+              <Text style={styles.systemAccessBtnText}>UPGRADE — $9.99/MO</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.systemAccessBtnSecondary} onPress={() => setSystemAccessGateOpen(false)} activeOpacity={0.8}>
+              <Text style={styles.systemAccessBtnText}>DISMISS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -825,35 +1277,39 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.bg }, scrollContent: { padding: 20, paddingBottom: 124 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 }, headerLeft: { flex: 1 }, headerTitle: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 6 }, headerSubtitle: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, headerInfoBtn: { padding: 4 },
-  infoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, justifyContent: 'center', alignItems: 'center', padding: 24 }, infoCard: { backgroundColor: '#030712', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '80%', width: '100%' }, infoScroll: { maxHeight: 320 }, infoTitle: { color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 12 }, infoText: { color: THEME.border, fontSize: 12, lineHeight: 20, fontWeight: '400' }, infoDoneBtn: { marginTop: 16, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent }, infoDoneText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  infoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, justifyContent: 'center', alignItems: 'center', padding: 24 }, infoCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '80%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, infoScroll: { maxHeight: 320 }, infoTitle: { color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 12 }, infoText: { color: THEME.border, fontSize: 12, lineHeight: 20, fontWeight: '400' }, infoDoneBtn: { marginTop: 16, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, infoDoneText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   center: { alignItems: 'center' },
-  atlasCard: { backgroundColor: '#040b14', borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }, atlasCardContent: { alignItems: 'stretch', zIndex: 1 },
-  atlasCardHeader: { backgroundColor: 'rgba(0,0,0,0.38)', marginHorizontal: -20, marginTop: -20, paddingTop: 20, paddingHorizontal: 20, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, atlasCardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, atlasScoreBlock: { alignSelf: 'flex-start' },
-  atlasViewSwitcher: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 2 }, atlasViewTab: { paddingVertical: 4, paddingHorizontal: 6, marginLeft: 4, borderWidth: 1, borderColor: 'transparent' }, atlasViewTabActive: { borderColor: THEME.accent }, atlasViewTabText: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 1 }, atlasViewTabTextActive: { color: THEME.accent }, bigScore: { color: 'white', fontSize: 64, fontWeight: '100' }, statLabel: { color: THEME.accent, fontSize: 10, fontWeight: '900', letterSpacing: 4, marginTop: 4 },
+  atlasCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', borderWidth: 1, borderColor: THEME.cardBorder, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, atlasCardContent: { alignItems: 'stretch', zIndex: 1 },
+  atlasCardHeader: { backgroundColor: 'rgba(0,0,0,0.35)', marginHorizontal: -20, marginTop: -20, paddingTop: 20, paddingHorizontal: 20, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: THEME.cardBorder }, atlasCardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, atlasScoreBlock: { alignSelf: 'flex-start' },
+  atlasViewSwitcher: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignSelf: 'flex-end' }, atlasViewTab: { paddingVertical: 4, paddingHorizontal: 6, marginLeft: 4, borderWidth: 1, borderColor: 'transparent' }, atlasViewTabActive: { borderColor: THEME.accent }, atlasViewTabText: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 1 }, atlasViewTabTextActive: { color: THEME.accent }, bigScore: { color: 'white', fontSize: 64, fontWeight: '100' }, statLabel: { color: THEME.accent, fontSize: 10, fontWeight: '900', letterSpacing: 4, marginTop: 4 },
   atlasStarfieldContainer: { position: 'relative', overflow: 'hidden', minHeight: 240 }, starfieldSvg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   radarWrapper: { height: 240, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }, atlasLegend: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', width: '100%', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, legendItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, marginRight: 12, marginBottom: 6, borderRadius: 6 },
-  trajectoryDaysLegend: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingTop: 12, marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, trajectoryDayItem: { flexDirection: 'row', alignItems: 'center', marginRight: 4, marginBottom: 4 }, trajectoryDayDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 }, trajectoryDayLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1 }, constellationTrajectoryLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 2, marginTop: 10, marginBottom: 4 }, legendItemHighlight: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }, legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 }, legendLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1, marginRight: 6 }, legendLabelHighlight: { color: THEME.accent }, legendValue: { color: 'white', fontSize: 12, fontWeight: '300' },
-  nodeBlock: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: '#040b14', marginBottom: 12, borderRadius: 12, overflow: 'hidden' }, nodeDrillDown: {}, nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 30, alignItems: 'center', paddingHorizontal: 20 }, nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  trajectoryPastLogsRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, trajectoryPastLogsLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 2 }, constellationTrajectoryLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 2, marginTop: 10, marginBottom: 4 }, legendItemHighlight: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }, legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 }, legendLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1, marginRight: 6 }, legendLabelHighlight: { color: THEME.accent }, legendValue: { color: 'white', fontSize: 12, fontWeight: '300' },
+  nodeBlock: { borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, marginBottom: 12, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, nodeOverlayCoord: { marginBottom: 20, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 12 }, nodeOverlayCoordTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }, editCoordBtn: { color: THEME.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1 }, nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 30, alignItems: 'center', paddingHorizontal: 20 }, nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   nodeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }, nodeIconLetter: { color: 'white', fontSize: 18, fontWeight: '700' },
-  nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 }, calibrationLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '500', marginTop: 4, letterSpacing: 2 }, nodeDirective: { color: THEME.textDim, fontSize: 8, fontWeight: '800', letterSpacing: 5, marginTop: 4, textTransform: 'uppercase' },
-  nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' }, nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 }, divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 }, coordinatesLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' }, addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 4 }, addCoordinateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 }, calibrationLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', marginTop: 4, letterSpacing: 4 }, nodeDirective: { color: THEME.textDim, fontSize: 8, fontWeight: '800', letterSpacing: 5, marginTop: 4, textTransform: 'uppercase' },
+  nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' }, nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 }, divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 }, coordinatesLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' }, addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 4 }, addCoordinateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   backRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, backText: { color: THEME.accent, fontSize: 14, fontWeight: '600', letterSpacing: 2 },
-  goalBlock: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: '#040b14', padding: 16, marginBottom: 12, borderRadius: 8 }, goalItem: { marginBottom: 30 }, goalName: { color: 'white', fontSize: 14, fontWeight: '600' }, goalVal: { fontWeight: '900' }, goalValueRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 }, goalValueBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginRight: 10 }, goalValueText: { fontSize: 16, fontWeight: '700' },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }, sliderTrack: { flex: 1, height: 24, justifyContent: 'center' }, sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' }, sliderFill: { position: 'absolute', left: 0, top: 11, height: 2, opacity: 0.6 }, sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, borderColor: '#38BDF8', top: 6, justifyContent: 'center', alignItems: 'center', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 }, sliderHandleInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#0F172A' },
+  goalBlock: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: THEME.card, padding: 16, marginBottom: 12, borderRadius: 12 }, goalItem: { marginBottom: 30 }, goalName: { color: 'white', fontSize: 14, fontWeight: '600' }, goalVal: { fontWeight: '900' }, goalValueRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 }, goalValueBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginRight: 10 }, goalValueText: { fontSize: 16, fontWeight: '700' },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }, sliderTrack: { flex: 1, height: 24, justifyContent: 'center' }, sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' }, sliderFill: { position: 'absolute', left: 0, top: 11, height: 2, opacity: 0.6 }, sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, borderColor: '#38BDF8', top: 6, justifyContent: 'center', alignItems: 'center', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 }, sliderHandleInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: THEME.card },
   valueCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' }, valueCircleText: { fontSize: 22, fontWeight: '200' },
   taskFilterBar: { marginBottom: 16, marginHorizontal: -20 }, taskFilterBarContent: { paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' }, taskFilterOption: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'transparent', marginRight: 8 }, taskFilterOptionActive: { borderColor: '#E2E8F0' }, taskFilterText: { color: '#64748B', fontSize: 11, fontWeight: '700', letterSpacing: 2 }, taskFilterTextActive: { color: 'white' },
-  addTaskBtn: { marginBottom: 16, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 4 }, addTaskBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  addTaskForm: { marginBottom: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: '#040b14', borderRadius: 8 }, addTaskFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, addTaskNodeRow: { flexDirection: 'row', marginBottom: 16 }, addTaskNodeBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' }, addTaskNodeBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1 }, addTaskDropdownWrap: { marginBottom: 16 }, addTaskDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4 }, addTaskDropdownTriggerText: { color: THEME.border, fontSize: 12, flex: 1 }, addTaskDropdownChevron: { marginLeft: 8 }, addTaskDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 4, overflow: 'hidden' }, addTaskDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, addTaskDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, addTaskCoordRow: { marginBottom: 16 }, addTaskCoordContent: { flexDirection: 'row', paddingRight: 20 }, addTaskCoordChip: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, borderWidth: 1, borderRadius: 4 }, addTaskCoordChipActive: {}, addTaskCoordChipText: { color: THEME.textDim, fontSize: 10, fontWeight: '600' }, addTaskInput: { color: 'white', fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 }, addTaskActions: { flexDirection: 'row', justifyContent: 'flex-end' }, addTaskCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 }, addTaskCancelText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 }, addTaskSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent }, addTaskSubmitText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  addTaskBtn: { marginBottom: 16, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12 }, addTaskBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  addTaskForm: { marginBottom: 16, padding: 16, borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, borderRadius: 12, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addTaskFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, addTaskNodeRow: { flexDirection: 'row', marginBottom: 16 }, addTaskNodeBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, alignItems: 'center' }, addTaskNodeBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1 }, addTaskDropdownWrap: { marginBottom: 16 }, addTaskDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4 }, addTaskDropdownTriggerText: { color: THEME.border, fontSize: 12, flex: 1 }, addTaskDropdownChevron: { marginLeft: 8 }, addTaskDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, addTaskDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, addTaskDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, addTaskCoordRow: { marginBottom: 16 }, addTaskCoordContent: { flexDirection: 'row', paddingRight: 20 }, addTaskCoordChip: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, borderWidth: 1, borderRadius: 4 }, addTaskCoordChipActive: {}, addTaskCoordChipText: { color: THEME.textDim, fontSize: 10, fontWeight: '600' }, addTaskInput: { color: 'white', fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 }, addTaskActions: { flexDirection: 'row', justifyContent: 'flex-end' }, addTaskCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 }, addTaskCancelText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 }, addTaskSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, addTaskSubmitText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   taskCoordSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 }, taskCoordSeparatorLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' }, taskCoordSeparatorLabel: { fontSize: 8, color: '#E2E8F0', letterSpacing: 3, fontWeight: '600', marginHorizontal: 10 },
-  taskCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, marginBottom: 12, backgroundColor: '#040b14', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, overflow: 'hidden', }, taskCardPriority: { borderWidth: 2, borderColor: '#E2E8F0', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }, taskCardCompleted: { opacity: 0.5 }, taskIndicator: { width: 4, height: 24, marginRight: 20 }, taskCardBody: { flex: 1, flexDirection: 'column' }, taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, taskFocusBtn: { padding: 4, marginRight: 10 }, taskTitleBlock: { flex: 1 }, taskRightBlock: { flexDirection: 'row', alignItems: 'center' }, taskCheck: {}, taskPriorityLabel: { fontSize: 6, fontWeight: '700', color: THEME.accent, letterSpacing: 1, marginRight: 8 },
+  taskCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, marginBottom: 12, backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskCardPriority: { borderWidth: 1, borderColor: THEME.cardBorder, shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }, taskCardCompleted: { opacity: 0.5 }, taskIndicator: { width: 4, height: 24, marginRight: 20 }, taskCardBody: { flex: 1, flexDirection: 'column' }, taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, taskFocusBtn: { padding: 4, marginRight: 10 }, taskTitleBlock: { flex: 1 }, taskRightBlock: { flexDirection: 'row', alignItems: 'center' }, taskCheck: {}, taskPriorityLabel: { fontSize: 6, fontWeight: '700', color: THEME.accent, letterSpacing: 1, marginRight: 8 },
   taskTitle: { color: 'white', fontSize: 14 }, taskTitleStrike: { textDecorationLine: 'line-through' }, taskGoal: { color: THEME.textDim, fontSize: 8, fontWeight: '800', marginTop: 4 },
-  taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }, taskEmptyStateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  taskEditCard: { backgroundColor: '#030712', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '85%', width: '100%' }, taskEditScroll: { maxHeight: 380 }, taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }, taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, taskEditNotes: { color: THEME.border, fontSize: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
-  addNodeCard: { backgroundColor: '#030712', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%' }, addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 }, addNodeSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent', marginRight: 10, marginBottom: 10 }, addNodeSwatchSelected: { borderColor: '#E2E8F0' },
-  profileBox: { padding: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }, sectionLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', marginBottom: 20 },
-  pillContainer: { flexDirection: 'row', gap: 10 }, pill: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }, pillActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, pillText: { color: THEME.textDim, fontSize: 12 }, pillTextActive: { color: THEME.accent, fontWeight: '700' },
-  coordinateEditForm: { paddingVertical: 8 }, coordinateEditCard: { backgroundColor: '#030712', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%' }, editFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, editFormInput: { color: 'white', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 20 },
+  taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }, taskEmptyStateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  taskEditCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '85%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskEditScroll: { maxHeight: 380 }, taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }, taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, taskEditNotes: { color: THEME.border, fontSize: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
+  addNodeCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 }, addNodeSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent', marginRight: 10, marginBottom: 10 }, addNodeSwatchSelected: { borderColor: '#E2E8F0' },
+  profileCard: { borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, marginBottom: 18, borderRadius: 12, overflow: 'hidden', padding: 24, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, profileSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, profileSectionIcon: { marginRight: 8 }, profileSectionLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, motivatorsCounter: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 1 }, motivatorsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, motivatorChip: { paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, width: '31%' }, motivatorChipActive: { borderColor: '#22C55E', backgroundColor: 'rgba(34, 197, 94, 0.15)' }, motivatorChipText: { color: THEME.textDim, fontSize: 11, fontWeight: '600' }, motivatorChipTextActive: { color: '#22C55E', fontWeight: '700' }, modelDropdownWrap: { marginTop: 4 }, modelDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: THEME.border, borderRadius: 4 }, modelDropdownTriggerText: { color: THEME.border, fontSize: 12, flex: 1 }, modelDropdownChevron: { marginLeft: 8 }, modelDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, modelDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemText: { color: THEME.textDim, fontSize: 11, fontWeight: '600' }, modelDropdownItemTextActive: { color: THEME.accent, fontWeight: '700' }, modelYouAreBlock: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }, modelYouAreLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 6 }, modelYouAreText: { color: THEME.border, fontSize: 13, lineHeight: 20, fontWeight: '400' }, profileChipScroll: {}, profileChipRow: { flexDirection: 'row', gap: 10, paddingRight: 30, marginBottom: 8 }, profileChip: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 4 }, profileChipActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, profileChipText: { color: THEME.textDim, fontSize: 12 }, profileChipTextActive: { color: THEME.accent, fontWeight: '700' }, peakPeriodRow: { flexDirection: 'row', gap: 12 }, peakBlock: { flex: 1, flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, peakBlockActive: { borderWidth: 2, borderColor: THEME.accent, shadowColor: THEME.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 }, peakBlockActiveMorning: { borderWidth: 2, borderColor: '#EAB308', backgroundColor: 'rgba(234, 179, 8, 0.12)', shadowColor: '#EAB308', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockActiveEvening: { borderWidth: 2, borderColor: '#F97316', backgroundColor: 'rgba(249, 115, 22, 0.12)', shadowColor: '#F97316', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockTitle: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, peakBlockTitleActive: { color: THEME.accent }, peakBlockTitleActiveMorning: { color: '#EAB308' }, peakBlockTitleActiveEvening: { color: '#F97316' }, peakBlockSub: { color: THEME.textDim, fontSize: 9, fontWeight: '600', letterSpacing: 1, marginTop: 4 }, peakBlockSubActive: { color: 'rgba(56, 189, 248, 0.9)' }, peakBlockSubActiveMorning: { color: 'rgba(234, 179, 8, 0.95)' }, peakBlockSubActiveEvening: { color: 'rgba(249, 115, 22, 0.95)' }, profileTextArea: { borderWidth: 1, borderColor: THEME.border, borderRadius: 4, color: 'white', fontSize: 13, padding: 12, minHeight: 100, textAlignVertical: 'top' }, sectionLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', marginBottom: 20 }, pillContainer: { flexDirection: 'row', gap: 10 }, pill: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12 }, pillActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, pillText: { color: THEME.textDim, fontSize: 12 }, pillTextActive: { color: THEME.accent, fontWeight: '700' },
+  coordinateEditForm: { paddingVertical: 8 }, coordinateEditCard: { backgroundColor: THEME.card, borderWidth: 1.5, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, coordEditSliderHandle: { borderColor: '#7DD3FC', borderWidth: 2.5, shadowColor: '#7DD3FC' }, coordEditNameInput: { color: '#475569', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, marginBottom: 20 }, coordEditEvidenceInput: { color: '#475569', fontSize: 14, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, marginBottom: 16 }, coordEditSliderTrack: { flex: 1, height: 16, justifyContent: 'center' }, coordEditSliderLine: { height: 1, width: '100%', backgroundColor: '#475569' }, coordEditSliderFill: { position: 'absolute', left: 0, top: 7.5, height: 1, backgroundColor: '#475569' }, coordEditDoneBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditDoneText: { color: '#475569', fontSize: 10, fontWeight: '700', letterSpacing: 2 }, coordEditAddTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 8 }, coordEditAddTaskInput: { flex: 1, color: '#475569', fontSize: 14, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditAddTaskBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12 }, coordEditTaskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingRight: 8, marginBottom: 4, borderBottomWidth: 0.5, borderBottomColor: '#475569' }, coordEditTaskTitle: { color: 'white', fontSize: 13, flex: 1, marginLeft: 10 }, editFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, editFormInput: { color: 'white', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 20 },
   evidenceLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 2, marginTop: 14, marginBottom: 6 },
   evidenceInput: { color: THEME.border, fontSize: 8, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }, evidencePreview: { color: THEME.textDim, fontSize: 10, letterSpacing: 1 },
-  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', backgroundColor: THEME.bg, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden' }, navBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, navIconWrap: { marginBottom: 6 }, navBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '800' }
+  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, borderTopColor: THEME.cardBorder, backgroundColor: THEME.card, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden' }, navBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, navIconWrap: { marginBottom: 6 }, navBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '800' },
+  copilotFab: { position: 'absolute', bottom: 120, right: 20, width: 48, height: 48, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', overflow: 'visible' }, copilotFabLocked: { opacity: 0.5 },
+  copilotContainer: { width: 48, height: 48, backgroundColor: 'transparent', overflow: 'visible', position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  copilotOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }, copilotCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, copilotCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }, copilotTitle: { color: THEME.accent, fontSize: 11, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }, copilotCloseX: { color: THEME.border, fontSize: 16, fontWeight: '600' }, copilotHeading: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 }, copilotBriefingLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 8 }, copilotBriefingPrefix: { fontWeight: '700', color: '#94A3B8', fontSize: 12, letterSpacing: 2 }, copilotBriefingBody: { flex: 1, color: THEME.border, fontSize: 12, letterSpacing: 2, lineHeight: 18 }, copilotBriefingNum: { fontWeight: '700', color: '#FFFFFF' }, copilotSuggestionBtn: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, copilotSuggestionBtnText: { color: THEME.border, fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+  systemAccessOverlay: { flex: 1, backgroundColor: 'rgba(21,34,56,0.96)', justifyContent: 'center', alignItems: 'center', padding: 24 }, systemAccessCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, systemAccessTitle: { color: '#E2E8F0', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }, systemAccessFeature: { color: THEME.border, fontSize: 11, fontWeight: '600', letterSpacing: 1, marginTop: 6 }, systemAccessTiers: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(226,232,240,0.3)' }, systemAccessTier: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 }, systemAccessBtnPrimary: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnSecondary: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnText: { color: '#E2E8F0', fontSize: 11, fontWeight: '700', letterSpacing: 2 }, devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 }, devOverrideLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 10 }, devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  systemBriefingCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: THEME.cardBorder, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, systemBriefingHeader: { marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' }, systemBriefingTitle: { color: '#E2E8F0', fontSize: 10, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }, systemBriefingPrimary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }, systemBriefingLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 3, marginBottom: 4 }, systemBriefingIntensity: { color: 'white', fontSize: 36, fontWeight: '200' }, systemBriefingStatusWrap: { alignItems: 'flex-end' }, systemBriefingStatusBadge: { fontSize: 11, fontWeight: '800', letterSpacing: 2 }, systemBriefingStatusOpt: { color: '#22C55E' }, systemBriefingStatusNom: { color: '#E2E8F0' }, systemBriefingStatusCrit: { color: '#FB7185' }, systemBriefingDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 12 }, systemBriefingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, systemBriefingMetaLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 2 }, systemBriefingMetaValue: { color: THEME.border, fontSize: 11, fontWeight: '600', letterSpacing: 1 }, systemBriefingAlert: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 2, borderLeftColor: THEME.accent, backgroundColor: 'rgba(56,189,248,0.06)' }, systemBriefingAlertText: { color: THEME.border, fontSize: 10, fontWeight: '700', letterSpacing: 1 }
 });

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, SafeAreaView, StatusBar, Dimensions, PanResponder, Modal, Switch, Animated } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, SafeAreaView, StatusBar, Dimensions, PanResponder, Modal, Switch, KeyboardAvoidingView, Platform } from 'react-native';
 import Svg, { Circle, Polygon, G, Rect, Path, Defs, RadialGradient, Stop, Line, Text as SvgText } from 'react-native-svg';
 import { supabase } from './lib/supabase';
 const { width, height } = Dimensions.get('window');
@@ -14,7 +14,7 @@ function pickHeaderFallback() {
 const THEME = {
   bg: '#152238', card: '#07101c', border: '#E2E8F0', accent: '#38BDF8', textDim: '#64748B',
   mind: '#38BDF8', body: '#FB7185', home: '#A78BFA',
-  cardBorder: 'rgba(148,163,184,0.28)', glow: 'rgba(56,189,248,0.22)', glowPop: 'rgba(56,189,248,0.3)',
+  cardBorder: 'rgba(226,232,240,0.5)', glow: 'rgba(56,189,248,0.22)', glowPop: 'rgba(56,189,248,0.3)',
 };
 
 const NODE_COLORS = [THEME.mind, THEME.body, THEME.home, '#34D399', '#FBBF24', '#F472B6', '#60A5FA', '#10B981'];
@@ -59,11 +59,12 @@ export default function App() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [addNodeForm, setAddNodeForm] = useState({ name: '', description: '', color: NODE_COLORS[0] });
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editNodeForm, setEditNodeForm] = useState({ name: '', description: '', color: NODE_COLORS[0] });
   const [stars, setStars] = useState<Array<{ cx: number; cy: number; r: number; op: number }>>([]);
   const [atlasGraphView, setAtlasGraphView] = useState<'radar' | 'trajectory' | 'constellation'>('radar');
   const [trajectoryDragX, setTrajectoryDragX] = useState<number | null>(null);
   const trajectoryChartWidthRef = useRef(0);
-  const [constellationW, setConstellationW] = useState(width);
   const [cognitiveModel, setCognitiveModel] = useState<'Architect' | 'Strategist' | 'Builder' | 'Analyst'>('Architect');
   const [peakPeriod, setPeakPeriod] = useState<'MORNING' | 'EVENING'>('MORNING');
   const [motivators, setMotivators] = useState<string[]>([]);
@@ -93,44 +94,6 @@ export default function App() {
   }), []);
 
   const TABS = ['Atlas', 'Nodes', 'Tasks', 'Profile'] as const;
-  const swipeOffset = useRef(new Animated.Value(0)).current;
-
-  const swipePageResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponderCapture: (_, { dx, dy }) => Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.2,
-    onPanResponderGrant: () => { swipeOffset.setValue(0); },
-    onPanResponderMove: (_, { dx }) => {
-      const i = TABS.findIndex(t => t === activeTab);
-      let capped = dx;
-      if (i === 0 && dx > 0) capped = dx * 0.4;
-      else if (i === TABS.length - 1 && dx < 0) capped = dx * 0.4;
-      else capped = Math.max(-width * 0.4, Math.min(width * 0.4, dx));
-      swipeOffset.setValue(capped);
-    },
-    onPanResponderRelease: (_, { dx }) => {
-      const i = TABS.findIndex(t => t === activeTab);
-      if (i === -1) return;
-      if (dx > 60 && i > 0) {
-        Animated.timing(swipeOffset, { toValue: width, duration: 220, useNativeDriver: true }).start(({ finished }) => {
-          if (finished) {
-            setActiveTab(TABS[i - 1]);
-            swipeOffset.setValue(-width);
-            Animated.timing(swipeOffset, { toValue: 0, duration: 220, useNativeDriver: true }).start();
-          }
-        });
-      } else if (dx < -60 && i < TABS.length - 1) {
-        Animated.timing(swipeOffset, { toValue: -width, duration: 220, useNativeDriver: true }).start(({ finished }) => {
-          if (finished) {
-            setActiveTab(TABS[i + 1]);
-            swipeOffset.setValue(width);
-            Animated.timing(swipeOffset, { toValue: 0, duration: 220, useNativeDriver: true }).start();
-          }
-        });
-      } else {
-        Animated.spring(swipeOffset, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
-      }
-    },
-  }), [activeTab]);
 
   const trackWidths = useRef<Record<string, number>>({});
 
@@ -140,8 +103,8 @@ export default function App() {
     type Action = 'calibrate' | 'logEvidence' | 'prioritize' | 'deployTask';
     type Line = { prefix: string; text: string };
     let briefingLines: Line[] = [];
-    let suggest1: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: 'CALIBRATE NODE', action: 'calibrate', nodeId: nodes[0]?.id };
-    let suggest2: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: 'LOG EVIDENCE', action: 'logEvidence', nodeId: nodes[0]?.id, goalId: nodes[0]?.goals[0]?.id };
+    let suggest1: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: `Your ${(nodes[0]?.name || 'node').toUpperCase()} node requires review; calibrate its coordinates.`, action: 'calibrate', nodeId: nodes[0]?.id };
+    let suggest2: { label: string; action: Action; nodeId?: string; goalId?: string } = { label: `Your ${(nodes[0]?.goals?.[0]?.name || 'coordinate').toUpperCase()} coordinate needs evidence; log it to strengthen alignment.`, action: 'logEvidence', nodeId: nodes[0]?.id, goalId: nodes[0]?.goals[0]?.id };
 
     if (activeTab === 'Atlas' || activeTab === 'Nodes' || activeTab === 'Profile') {
       const withAvg = nodes.map(n => ({ node: n, avg: getAvg(n) })).sort((a, b) => b.avg - a.avg);
@@ -177,9 +140,9 @@ export default function App() {
           briefingLines = [{ prefix: '> STATUS:', text: 'NO NODES DEFINED. ADD NODES TO BUILD THE ATLAS.' }];
         }
       }
-      suggest1 = { label: `CALIBRATE ${lowest?.node.name.toUpperCase() || 'NODE'} NODE (+${delta})`, action: 'calibrate', nodeId: lowest?.node.id };
+      suggest1 = { label: `Your ${(lowest?.node?.name || 'node').toUpperCase()} node requires review; calibrate its coordinates.`, action: 'calibrate', nodeId: lowest?.node.id };
       const goalForEvidence = highest?.node.goals.find((g: any) => !(g.evidence && String(g.evidence).trim())) || highest?.node.goals[0];
-      suggest2 = { label: `LOG EVIDENCE FOR ${highest?.node.name.toUpperCase() || 'NODE'}`, action: 'logEvidence', nodeId: highest?.node.id, goalId: goalForEvidence?.id };
+      suggest2 = { label: `Your ${(goalForEvidence?.name || 'coordinate').toUpperCase()} coordinate in ${(highest?.node?.name || 'node').toUpperCase()} needs evidence; log it to strengthen alignment.`, action: 'logEvidence', nodeId: highest?.node.id, goalId: goalForEvidence?.id };
     } else if (activeTab === 'Tasks') {
       const allTasks: any[] = [];
       nodes.forEach(n => n.goals.forEach((g: any) => (g.tasks || []).forEach((t: any) => allTasks.push({ ...t, nodeId: n.id, goalId: g.id, goalName: g.name }))));
@@ -195,10 +158,10 @@ export default function App() {
       const needsNode = withAvg[0]?.node;
       briefingLines = [
         { prefix: '> STATUS:', text: `DAILY VELOCITY — ${completed} COMPLETED, ${pending} PENDING.` },
-        { prefix: topCoord ? '> ALERT:' : '> STATUS:', text: topCoord ? `${topCoord.goalName.toUpperCase()} HAS HIGHEST PENDING LOAD (${topCoord.pending} TASKS).` : 'NO PENDING TASKS.' },
+        { prefix: topCoord ? '> ALERT:' : '> STATUS:', text: topCoord ? `${topCoord.goalName.toUpperCase()} HAS HIGHEST PENDING LOAD (${topCoord.pending} TASK${topCoord.pending !== 1 ? 'S' : ''}).` : 'NO PENDING TASK.' },
       ];
-      suggest1 = { label: topCoord ? `PRIORITIZE ${topCoord.goalName.toUpperCase()} COORDINATE` : 'PRIORITIZE COORDINATE', action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId };
-      suggest2 = { label: `DEPLOY NEW TASK FOR ${needsNode?.name.toUpperCase() || 'MIND'}`, action: 'deployTask', nodeId: needsNode?.id, goalId: needsNode?.goals[0]?.id };
+      suggest1 = { label: `Your ${(topCoord?.goalName || 'coordinate').toUpperCase()} coordinate has pending work; prioritize and plan.`, action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId };
+      suggest2 = { label: `Your ${(needsNode?.name || 'mind').toUpperCase()} node could use a new task; deploy one to build momentum.`, action: 'deployTask', nodeId: needsNode?.id, goalId: needsNode?.goals[0]?.id };
     }
 
     return { briefingLines, suggest1, suggest2 };
@@ -216,6 +179,18 @@ export default function App() {
     const re = new RegExp(`(\\d+\\.?\\d*|${escaped.join('|')})`, 'gi');
     return { wordToColor, re };
   }, [nodes]);
+
+  const handleSuggestion = useCallback((s: { action: string; nodeId?: string; goalId?: string }) => {
+    if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
+    else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+    else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
+    else if (s.action === 'deployTask') {
+      const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId } : (nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : { nodeId: '', goalId: '' });
+      if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskTitle(''); setAddTaskCoordDropdownOpen(false); setAddTaskOpen(true); }
+    }
+  }, [nodes]);
+
+  const suggestionBtnLabel: Record<string, string> = { calibrate: 'CALIBRATE', logEvidence: 'LOG EVIDENCE', prioritize: 'PRIORITIZE', deployTask: 'ADD TASK' };
 
   const STARFIELD_HEIGHT = 240;
   useEffect(() => {
@@ -306,7 +281,20 @@ export default function App() {
 
   const getNodeAvg = (node: any) => (node.goals.reduce((acc: number, g: any) => acc + g.value, 0) / node.goals.length).toFixed(1);
 
+  const updateNode = (nodeId: string, patch: { name?: string; description?: string; color?: string }) => {
+    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, ...patch } : n));
+  };
+
   useEffect(() => { if (!editingCoordinate) setCoordEditAddTitle(''); }, [editingCoordinate]);
+
+  useEffect(() => {
+    if (editingNodeId) {
+      const node = nodes.find(n => n.id === editingNodeId);
+      if (node) {
+        setEditNodeForm({ name: node.name, description: node.description || '', color: node.color });
+      }
+    }
+  }, [editingNodeId, nodes]);
 
   useEffect(() => {
     let mounted = true;
@@ -326,7 +314,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <Animated.View style={{ flex: 1, transform: [{ translateX: swipeOffset }] }} {...swipePageResponder.panHandlers}>
+      <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -351,7 +339,6 @@ export default function App() {
           const needsCal = nodes.reduce((a, n) => a + (n.goals || []).filter((g: any) => g.value < 6).length, 0);
           const needEvidence = nodes.reduce((a, n) => a + (n.goals || []).filter((g: any) => !(g.evidence && String(g.evidence).trim())).length, 0);
           const totalCoords = nodes.reduce((a, n) => a + (n.goals || []).length, 0);
-          const systemStatus = parseFloat(systemBalance) >= 8 ? 'OPTIMIZED' : parseFloat(systemBalance) >= 5 ? 'NOMINAL' : 'CRITICAL DRIFT';
           const getTierForNode = (node: any) => {
             if (node.id === 'mind') return 0;
             if (node.id === 'body') return 1;
@@ -380,7 +367,6 @@ export default function App() {
             const f = i - i0;
             return averageData[i0] * (1 - f) + averageData[i1] * f;
           };
-          const displayValue = (atlasGraphView === 'trajectory' && trajectoryDragX != null) ? interpolatedAvg(trajectoryDragX).toFixed(1) : systemBalance;
           const zoneYMin = [24, 96, 168] as const;   // MIND 10–30%, BODY 40–60%, HOME 70–90%
           const zoneH = 48;
           const tierColors = [THEME.mind, THEME.body, THEME.home] as const;
@@ -407,11 +393,22 @@ export default function App() {
           const sequence7 = getLast7SequenceNodes();
           return (
           <>
+          {/* System Status: above graph */}
+          <View style={styles.systemManifestCard}>
+            <View style={styles.systemManifestPrimaryRow}>
+              <View style={styles.systemManifestLeft}>
+                <Text style={styles.systemManifestBracketLabel}>SYSTEM STATUS</Text>
+              </View>
+              <View style={styles.systemManifestVLine} />
+              <View style={styles.systemManifestStatusBlock}>
+                <Text style={styles.systemManifestBracketValue}>{systemBalance}</Text>
+              </View>
+            </View>
+          </View>
           <View style={styles.atlasCard}>
             <View style={styles.atlasCardContent}>
               <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow]}>
                 <View style={styles.atlasScoreBlock}>
-                  <Text style={[styles.bigScore, atlasGraphView === 'constellation' && { fontWeight: '100' }]}>{displayValue}</Text>
                   <Text style={styles.statLabel}>
                     {atlasGraphView === 'radar' ? 'RADAR' : atlasGraphView === 'trajectory' ? 'TRAJECTORY' : 'CONSTELLATION'}
                   </Text>
@@ -528,32 +525,55 @@ export default function App() {
                   </>
                 )}
                 {atlasGraphView === 'constellation' && (() => {
-                  const totalWidth = constellationW;
-                  const xForSlot = (i: number) => (i / 6) * totalWidth;
-                  const pts = sequence7.map((s, i) => {
-                    const x = xForSlot(i);
-                    const y = s.empty ? BODY_BASELINE_Y : scoreToY(s.score, zoneYMin[s.tier]);
-                    return { x, y };
-                  });
-                  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                  const ROW_H = 52;
+                  const VB_W = 320;
+                  const sr = (seed: number) => { const x = Math.sin(seed) * 10000; return x - Math.floor(x); };
+                  const completedForNode = (n: any) => (n.goals || []).reduce((acc: number, g: any) => acc + (g.tasks || []).filter((t: any) => t.completed).length, 0);
+
                   return (
-                  <>
-                    <View style={{ width: '100%' }} onLayout={(e) => setConstellationW(e.nativeEvent.layout.width)}>
-                      <Svg viewBox={`0 0 ${totalWidth} 240`} preserveAspectRatio="none" width="100%" height={240}>
-                        {[0, 1, 2].map(t => (
-                          <Rect key={`zone-${t}`} x={0} y={zoneYMin[t]} width={totalWidth} height={zoneH} fill={tierColors[t]} fillOpacity={0.06} />
+                    <View style={{ width: '100%', marginBottom: 4 }}>
+                      {nodes.map((node) => {
+                        const seed = (node.id || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                        const completed = completedForNode(node);
+                        const brightCount = Math.max(2, completed);
+                        const dimDots = Array.from({ length: 38 }, (_, i) => ({
+                          x: 8 + sr(seed + i * 7.3) * (VB_W - 16),
+                          y: 6 + sr(seed + i * 13.7 + 100) * (ROW_H - 14),
+                        }));
+                        const brightDots = Array.from({ length: brightCount }, (_, i) => ({
+                          x: 8 + sr(seed + 2000 + i * 11.1) * (VB_W - 16),
+                          y: 6 + sr(seed + 2000 + i * 17.3 + 1) * (ROW_H - 14),
+                        }));
+                        return (
+                          <View key={node.id} style={{ height: ROW_H, width: '100%' }}>
+                            <Svg width="100%" height={ROW_H} viewBox={`0 0 ${VB_W} ${ROW_H}`} preserveAspectRatio="xMidYMid meet">
+                              {/* Dim star-field dots (node color) */}
+                              {dimDots.map((d, i) => (
+                                <Circle key={`d-${i}`} cx={d.x} cy={d.y} r={1.2} fill={node.color} fillOpacity={0.32} />
+                              ))}
+                              {/* Bright dots: glow + core (recently completed tasks) */}
+                              {brightDots.map((d, i) => (
+                                <React.Fragment key={`b-${i}`}>
+                                  <Circle cx={d.x} cy={d.y} r={5} fill={node.color} fillOpacity={0.4} />
+                                  <Circle cx={d.x} cy={d.y} r={2} fill={node.color} fillOpacity={1} />
+                                </React.Fragment>
+                              ))}
+                              {/* Faint silver separator at bottom of row */}
+                              <Line x1={0} y1={ROW_H - 1} x2={VB_W} y2={ROW_H - 1} stroke="#E2E8F0" strokeWidth="0.5" opacity={0.5} />
+                            </Svg>
+                          </View>
+                        );
+                      })}
+                      <View style={styles.atlasLegend}>
+                        {nodes.map((n) => (
+                          <View key={n.id} style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: n.color }]} />
+                            <Text style={styles.legendLabel}>{n.name.toUpperCase()}</Text>
+                            <Text style={styles.legendValue}>{getNodeAvg(n)}</Text>
+                          </View>
                         ))}
-                        {[0, 1, 2].map(t => (
-                          <G key={`label-${t}`}>
-                            <Rect x={6} y={zoneYMin[t] + 4} width={4} height={24} fill={tierColors[t]} />
-                            <SvgText x={14} y={zoneYMin[t] + 20} fill={THEME.border} fontSize="10" fontWeight="700" letterSpacing={1}>{tierNames[t]}</SvgText>
-                          </G>
-                        ))}
-                        <Path d={pathD} stroke="#E2E8F0" strokeWidth={0.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                      </Svg>
+                      </View>
                     </View>
-                    <Text style={styles.constellationTrajectoryLabel}>TRAJECTORY // LAST 7 SEQUENCE NODES</Text>
-                  </>
                   );
                 })()}
               </View>
@@ -570,48 +590,62 @@ export default function App() {
               )}
             </View>
           </View>
-          <View style={styles.systemBriefingCard}>
-            <View style={styles.systemBriefingHeader}>
-              <Text style={styles.systemBriefingTitle}>SYSTEM STATUS BRIEFING</Text>
-            </View>
-            <View style={styles.systemBriefingPrimary}>
-              <View>
-                <Text style={styles.systemBriefingLabel}>AVERAGE INTENSITY</Text>
-                <Text style={styles.systemBriefingIntensity}>{systemBalance}</Text>
+          {/* Deflection Monitor: STRUCTURAL DRIFT */}
+          {(() => {
+            const driftSparkline = [0, 1, 2, 3, 4, 5, 6].map(i => {
+              const vals = trajectoryDataPerNode.map(arr => arr[i]);
+              return vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
+            });
+            const stabilizing = driftSparkline[6] < driftSparkline[0];
+            const arrowUp = !stabilizing;
+            const arrowColor = stabilizing ? '#22D3EE' : '#F59E0B';
+            const arrowPath = arrowUp
+              ? 'M 12 4 L 4 14 L 10 14 L 10 22 L 14 22 L 14 14 L 20 14 Z'
+              : 'M 12 20 L 4 10 L 10 10 L 10 2 L 14 2 L 14 10 L 20 10 Z';
+            return (
+              <View style={styles.deflectionCard}>
+                <View style={styles.deflectionRow}>
+                  <View style={styles.deflectionLeft}>
+                    <Text style={styles.deflectionLabel}>STRUCTURAL DRIFT</Text>
+                    <Text style={styles.deflectionValue}>{driftDelta === '0' ? '0 PT(S)' : `${driftDelta} PT(S)`}</Text>
+                  </View>
+                  <View style={styles.deflectionVLine} />
+                  <View style={styles.deflectionRight}>
+                    <Svg width={32} height={32} viewBox="0 0 24 24">
+                      <Path d={arrowPath} fill={arrowColor} />
+                    </Svg>
+                  </View>
+                </View>
               </View>
-              <View style={styles.systemBriefingStatusWrap}>
-                <Text style={styles.systemBriefingLabel}>SYSTEM STATUS</Text>
-                <Text style={[styles.systemBriefingStatusBadge, systemStatus === 'OPTIMIZED' && styles.systemBriefingStatusOpt, systemStatus === 'NOMINAL' && styles.systemBriefingStatusNom, systemStatus === 'CRITICAL DRIFT' && styles.systemBriefingStatusCrit]}>{systemStatus}</Text>
-              </View>
+            );
+          })()}
+          {/* Summary card */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryHeading}>ATLAS GUIDANCE</Text>
+            <View style={styles.summarySuggestionSection}>
+              <Text style={styles.summarySuggestionLabel}>
+                {copilotContent.suggest1.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
+                  const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                  if (col) return <Text key={i} style={{ color: col }}>{part}</Text>;
+                  return <Text key={i}>{part}</Text>;
+                })}
+              </Text>
+              <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => handleSuggestion(copilotContent.suggest1)} activeOpacity={0.8}>
+                <Text style={styles.summarySuggestionBtnText}>{suggestionBtnLabel[copilotContent.suggest1.action] || 'GO'}</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.systemBriefingDivider} />
-            <View style={styles.systemBriefingRow}>
-              <Text style={styles.systemBriefingMetaLabel}>LEADING</Text>
-              <Text style={[styles.systemBriefingMetaValue, highest && { color: highest.node.color }]}>{highest ? `${highest.node.name.toUpperCase()} (${getNodeAvg(highest.node)})` : '—'}</Text>
+            <View style={[styles.summarySuggestionSection, { marginBottom: 0 }]}>
+              <Text style={styles.summarySuggestionLabel}>
+                {copilotContent.suggest2.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
+                  const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                  if (col) return <Text key={i} style={{ color: col }}>{part}</Text>;
+                  return <Text key={i}>{part}</Text>;
+                })}
+              </Text>
+              <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => handleSuggestion(copilotContent.suggest2)} activeOpacity={0.8}>
+                <Text style={styles.summarySuggestionBtnText}>{suggestionBtnLabel[copilotContent.suggest2.action] || 'GO'}</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.systemBriefingRow}>
-              <Text style={styles.systemBriefingMetaLabel}>TRAILING</Text>
-              <Text style={[styles.systemBriefingMetaValue, lowest && { color: lowest.node.color }]}>{lowest ? `${lowest.node.name.toUpperCase()} (${getNodeAvg(lowest.node)})` : '—'}</Text>
-            </View>
-            <View style={styles.systemBriefingRow}>
-              <Text style={styles.systemBriefingMetaLabel}>STRUCTURAL DRIFT</Text>
-              <Text style={styles.systemBriefingMetaValue}>{driftDelta === '0' ? 'BALANCED' : `${driftDelta} PT(S)`}</Text>
-            </View>
-            <View style={styles.systemBriefingDivider} />
-            <View style={styles.systemBriefingRow}>
-              <Text style={styles.systemBriefingMetaLabel}>FOOTPRINT</Text>
-              <Text style={styles.systemBriefingMetaValue}>{nodes.length} NODES · {totalCoords} COORDINATES</Text>
-            </View>
-            {needsCal > 0 && (
-              <View style={styles.systemBriefingAlert}>
-                <Text style={styles.systemBriefingAlertText}>› {needsCal} COORDINATE(S) BELOW 6 — CALIBRATION RECOMMENDED</Text>
-              </View>
-            )}
-            {needEvidence > 0 && (
-              <View style={styles.systemBriefingAlert}>
-                <Text style={styles.systemBriefingAlertText}>› {needEvidence} COORDINATE(S) LACK EVIDENCE — LOG EVIDENCE</Text>
-              </View>
-            )}
           </View>
           </>
           );
@@ -630,9 +664,14 @@ export default function App() {
                       <View style={[styles.nodeIcon, { backgroundColor: node.color }]}>
                         <Text style={styles.nodeIconLetter}>{node.name[0].toUpperCase()}</Text>
                       </View>
-                      <View>
-                        <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
-                        <Text style={styles.nodeDirective}>{node.description}</Text>
+                      <View style={styles.nodeTitleRow}>
+                        {selectedNodeId === node.id ? (
+                          <TouchableOpacity onPress={(e) => { e.stopPropagation(); setEditingNodeId(node.id); }} activeOpacity={0.8}>
+                            <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
+                        )}
                       </View>
                     </View>
                     <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
@@ -641,7 +680,13 @@ export default function App() {
                 {selectedNodeId === node.id && (
                   <View style={styles.nodeExpanded}>
                     <View style={styles.divider} />
-                    <Text style={styles.coordinatesLabel}>ACTIVE COORDINATES</Text>
+                    {node.description && (
+                      <>
+                        <Text style={styles.coordinatesLabel}>DESIRED INTENT</Text>
+                        <Text style={styles.nodeDescriptionText}>{node.description}</Text>
+                      </>
+                    )}
+                    <Text style={styles.coordinatesLabel}>ACTIVE COORDINATE</Text>
                     {node.goals.map(goal => {
                       const key = `${node.id}-${goal.id}`;
                       const applySlider = (evt: { nativeEvent: { locationX: number } }) => {
@@ -694,8 +739,11 @@ export default function App() {
               <TouchableOpacity
                 style={styles.addTaskBtn}
                 onPress={() => {
+                  const selNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+                  const useSelected = selNode?.goals?.[0];
                   const first = nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : null;
-                  setAddTaskTarget(first);
+                  const initial = useSelected ? { nodeId: selNode!.id, goalId: selNode!.goals[0].id } : first;
+                  setAddTaskTarget(initial);
                   setAddTaskTitle('');
                   setAddTaskCoordDropdownOpen(false);
                   setAddTaskOpen(true);
@@ -765,7 +813,7 @@ export default function App() {
               if (groups.length === 0) {
                 return (
                   <View style={styles.taskEmptyState}>
-                    <Text style={styles.taskEmptyStateText}>NO ACTIVE COORDINATES</Text>
+                    <Text style={styles.taskEmptyStateText}>NO ACTIVE COORDINATE</Text>
                   </View>
                 );
               }
@@ -960,7 +1008,7 @@ export default function App() {
           </View>
         )}
       </ScrollView>
-      </Animated.View>
+      </View>
       <View style={styles.nav}>
         {['Atlas', 'Nodes', 'Tasks', 'Profile'].map(t => {
           const active = activeTab === t;
@@ -969,7 +1017,7 @@ export default function App() {
             <TouchableOpacity key={t} onPress={() => setActiveTab(t)} style={styles.navBtn}>
               <View style={styles.navIconWrap}>
                 {t === 'Atlas' && (
-                  <Svg width={22} height={22} viewBox="0 0 1024 1024">
+                  <Svg width={28} height={28} viewBox="0 0 1024 1024">
                     <Path fill={c} d="M511.8 1023.7C229.6 1023.7 0 794.1 0 511.8S229.6 0 511.8 0s511.8 229.6 511.8 511.8-229.5 511.9-511.8 511.9z m0-938.4c-235.2 0-426.5 191.3-426.5 426.5s191.3 426.5 426.5 426.5S938.3 747 938.3 511.8 747 85.3 511.8 85.3z" />
                     <Path fill={c} d="M292.7 773.7c-11.1 0-22-4.4-30.2-12.5-11.8-11.7-15.6-29.3-9.9-44.9l96.9-263.5c17.9-48.7 54.6-85.4 103.3-103.3l263.5-96.9c15.6-5.7 33.1-1.9 44.9 9.9 11.8 11.7 15.6 29.3 9.9 44.9l-96.9 263.5c-17.9 48.7-54.6 85.4-103.3 103.3l-263.5 96.9c-4.8 1.8-9.8 2.6-14.7 2.6z m366.5-409.2l-176.8 65c-25.6 9.4-43.3 27.2-52.7 52.7L364.6 659l176.8-65c25.6-9.4 43.3-27.2 52.7-52.7l65.1-176.8zM556.1 634.1h0.2-0.2z" />
                   </Svg>
@@ -986,7 +1034,7 @@ export default function App() {
                   </Svg>
                 )}
                 {t === 'Tasks' && (
-                  <Svg width={22} height={22} viewBox="0 0 32 32">
+                  <Svg width={28} height={28} viewBox="0 0 32 32">
                     <Path fill={c} d="M10.293 5.293L7 8.586L5.707 7.293L4.293 8.707L7 11.414l4.707-4.707zM14 7v2h14V7zm0 8v2h14v-2zm0 8v2h14v-2z" />
                   </Svg>
                 )}
@@ -999,7 +1047,6 @@ export default function App() {
                   </Svg>
                 )}
               </View>
-              <Text style={[styles.navBtnText, active && { color: THEME.accent }]}>{t.toUpperCase()}</Text>
             </TouchableOpacity>
           );
         })}
@@ -1030,26 +1077,59 @@ export default function App() {
       {addNodeOpen && (
         <View style={styles.infoOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setAddNodeOpen(false); setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={1} />
-          <View style={styles.addNodeCard} pointerEvents="auto">
-            <Text style={styles.editFormLabel}>COLOR</Text>
-            <View style={styles.addNodeColorRow}>
-              {NODE_COLORS.map(c => (
-                <TouchableOpacity key={c} onPress={() => setAddNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, addNodeForm.color === c && styles.addNodeSwatchSelected]} />
-              ))}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+            <View style={styles.addNodeCard} pointerEvents="auto">
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <Text style={styles.editFormLabel}>COLOR</Text>
+                <View style={styles.addNodeColorRow}>
+                  {NODE_COLORS.map(c => (
+                    <TouchableOpacity key={c} onPress={() => setAddNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, addNodeForm.color === c && styles.addNodeSwatchSelected]} />
+                  ))}
+                </View>
+                <Text style={styles.editFormLabel}>TITLE</Text>
+                <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={(t) => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} />
+                <Text style={styles.evidenceLabel}>DEFINE THE DESIRED INTENT</Text>
+                <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={addNodeForm.description} onChangeText={(t) => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="Intent or purpose…" placeholderTextColor={THEME.textDim} />
+                <View style={styles.addTaskActions}>
+                  <TouchableOpacity style={styles.addTaskCancel} onPress={() => { setAddNodeOpen(false); setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
+                    <Text style={styles.addTaskCancelText}>CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.addTaskSubmit} onPress={addNode} activeOpacity={0.7}>
+                    <Text style={styles.addTaskSubmitText}>ADD NODE</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-            <Text style={styles.editFormLabel}>TITLE</Text>
-            <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={(t) => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} />
-            <Text style={styles.evidenceLabel}>DEFINE THE DESIRED INTENT</Text>
-            <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={addNodeForm.description} onChangeText={(t) => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="Intent or purpose…" placeholderTextColor={THEME.textDim} />
-            <View style={styles.addTaskActions}>
-              <TouchableOpacity style={styles.addTaskCancel} onPress={() => { setAddNodeOpen(false); setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
-                <Text style={styles.addTaskCancelText}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.addTaskSubmit} onPress={addNode} activeOpacity={0.7}>
-                <Text style={styles.addTaskSubmitText}>ADD NODE</Text>
-              </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+      {editingNodeId && (
+        <View style={styles.infoOverlay} pointerEvents="box-none">
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={1} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+            <View style={styles.addNodeCard} pointerEvents="auto">
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <Text style={styles.editFormLabel}>COLOR</Text>
+                <View style={styles.addNodeColorRow}>
+                  {NODE_COLORS.map(c => (
+                    <TouchableOpacity key={c} onPress={() => setEditNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, editNodeForm.color === c && styles.addNodeSwatchSelected]} />
+                  ))}
+                </View>
+                <Text style={styles.editFormLabel}>TITLE</Text>
+                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={(t) => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} />
+                <Text style={styles.evidenceLabel}>DEFINE THE DESIRED INTENT</Text>
+                <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={editNodeForm.description} onChangeText={(t) => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="Intent or purpose…" placeholderTextColor={THEME.textDim} />
+                <View style={styles.addTaskActions}>
+                  <TouchableOpacity style={styles.addTaskCancel} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
+                    <Text style={styles.addTaskCancelText}>CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.addTaskSubmit} onPress={() => { if (editNodeForm.name.trim() && editingNodeId) { updateNode(editingNodeId, { name: editNodeForm.name.trim(), description: editNodeForm.description.trim() || '', color: editNodeForm.color }); setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); } }} activeOpacity={0.7}>
+                    <Text style={styles.addTaskSubmitText}>SAVE</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       )}
       {editingCoordinate && (() => {
@@ -1213,39 +1293,23 @@ export default function App() {
               );
             })}
             <Text style={styles.copilotHeading}>SUGGESTIONS</Text>
-            <TouchableOpacity
-              style={styles.copilotSuggestionBtn}
-              onPress={() => {
-                setCopilotOpen(false);
-                const s = copilotContent.suggest1;
-                if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
-                else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-                else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-                else if (s.action === 'deployTask') {
-                  const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId } : (nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : { nodeId: '', goalId: '' });
-                  if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskTitle(''); setAddTaskCoordDropdownOpen(false); setAddTaskOpen(true); }
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.copilotSuggestionBtnText}>{copilotContent.suggest1.label}</Text>
+            <TouchableOpacity style={styles.copilotSuggestionBtn} onPress={() => { setCopilotOpen(false); handleSuggestion(copilotContent.suggest1); }} activeOpacity={0.8}>
+              <Text style={styles.copilotSuggestionBtnText}>
+                {copilotContent.suggest1.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
+                  const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                  if (col) return <Text key={i} style={{ color: col }}>{part}</Text>;
+                  return <Text key={i}>{part}</Text>;
+                })}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.copilotSuggestionBtn}
-              onPress={() => {
-                setCopilotOpen(false);
-                const s = copilotContent.suggest2;
-                if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
-                else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-                else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-                else if (s.action === 'deployTask') {
-                  const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId } : (nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : { nodeId: '', goalId: '' });
-                  if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskTitle(''); setAddTaskCoordDropdownOpen(false); setAddTaskOpen(true); }
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.copilotSuggestionBtnText}>{copilotContent.suggest2.label}</Text>
+            <TouchableOpacity style={styles.copilotSuggestionBtn} onPress={() => { setCopilotOpen(false); handleSuggestion(copilotContent.suggest2); }} activeOpacity={0.8}>
+              <Text style={styles.copilotSuggestionBtnText}>
+                {copilotContent.suggest2.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
+                  const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                  if (col) return <Text key={i} style={{ color: col }}>{part}</Text>;
+                  return <Text key={i}>{part}</Text>;
+                })}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1276,40 +1340,63 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.bg }, scrollContent: { padding: 20, paddingBottom: 124 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 }, headerLeft: { flex: 1 }, headerTitle: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 6 }, headerSubtitle: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, headerInfoBtn: { padding: 4 },
-  infoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, justifyContent: 'center', alignItems: 'center', padding: 24 }, infoCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '80%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, infoScroll: { maxHeight: 320 }, infoTitle: { color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 12 }, infoText: { color: THEME.border, fontSize: 12, lineHeight: 20, fontWeight: '400' }, infoDoneBtn: { marginTop: 16, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, infoDoneText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 }, headerLeft: { flex: 1 }, headerTitle: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 6 }, headerSubtitle: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 }, headerInfoBtn: { padding: 4 },
+  infoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(15, 23, 42, 0.85)' }, infoCard: { backgroundColor: THEME.card,  borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '80%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, infoScroll: { maxHeight: 320 }, infoTitle: { color: THEME.accent, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 12 }, infoText: { color: THEME.border, fontSize: 14, lineHeight: 20, fontWeight: '400' }, infoDoneBtn: { marginTop: 16, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, infoDoneText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   center: { alignItems: 'center' },
-  atlasCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', borderWidth: 1, borderColor: THEME.cardBorder, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, atlasCardContent: { alignItems: 'stretch', zIndex: 1 },
+  atlasCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, atlasCardContent: { alignItems: 'stretch', zIndex: 1 },
   atlasCardHeader: { backgroundColor: 'rgba(0,0,0,0.35)', marginHorizontal: -20, marginTop: -20, paddingTop: 20, paddingHorizontal: 20, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: THEME.cardBorder }, atlasCardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, atlasScoreBlock: { alignSelf: 'flex-start' },
-  atlasViewSwitcher: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignSelf: 'flex-end' }, atlasViewTab: { paddingVertical: 4, paddingHorizontal: 6, marginLeft: 4, borderWidth: 1, borderColor: 'transparent' }, atlasViewTabActive: { borderColor: THEME.accent }, atlasViewTabText: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 1 }, atlasViewTabTextActive: { color: THEME.accent }, bigScore: { color: 'white', fontSize: 64, fontWeight: '100' }, statLabel: { color: THEME.accent, fontSize: 10, fontWeight: '900', letterSpacing: 4, marginTop: 4 },
+  atlasViewSwitcher: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignSelf: 'flex-end' }, atlasViewTab: { paddingVertical: 4, paddingHorizontal: 6, marginLeft: 4, borderWidth: 1, borderColor: 'transparent' }, atlasViewTabActive: { borderColor: THEME.accent }, atlasViewTabText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1 }, atlasViewTabTextActive: { color: THEME.accent }, bigScore: { color: 'white', fontSize: 64, fontWeight: '100' }, statLabel: { color: THEME.accent, fontSize: 14, fontWeight: '900', letterSpacing: 4, marginTop: 4 },
   atlasStarfieldContainer: { position: 'relative', overflow: 'hidden', minHeight: 240 }, starfieldSvg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   radarWrapper: { height: 240, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }, atlasLegend: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', width: '100%', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, legendItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8, marginRight: 12, marginBottom: 6, borderRadius: 6 },
-  trajectoryPastLogsRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, trajectoryPastLogsLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 2 }, constellationTrajectoryLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 2, marginTop: 10, marginBottom: 4 }, legendItemHighlight: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }, legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 }, legendLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1, marginRight: 6 }, legendLabelHighlight: { color: THEME.accent }, legendValue: { color: 'white', fontSize: 12, fontWeight: '300' },
-  nodeBlock: { borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, marginBottom: 12, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, nodeOverlayCoord: { marginBottom: 20, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 12 }, nodeOverlayCoordTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }, editCoordBtn: { color: THEME.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1 }, nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 30, alignItems: 'center', paddingHorizontal: 20 }, nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  nodeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }, nodeIconLetter: { color: 'white', fontSize: 18, fontWeight: '700' },
-  nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 }, calibrationLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', marginTop: 4, letterSpacing: 4 }, nodeDirective: { color: THEME.textDim, fontSize: 8, fontWeight: '800', letterSpacing: 5, marginTop: 4, textTransform: 'uppercase' },
-  nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' }, nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 }, divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 }, coordinatesLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' }, addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 4 }, addCoordinateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  trajectoryPastLogsRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }, trajectoryPastLogsLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 }, constellationTrajectoryLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, marginTop: 10, marginBottom: 4 }, legendItemHighlight: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }, legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 }, legendLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginRight: 6 }, legendLabelHighlight: { color: THEME.accent }, legendValue: { color: 'white', fontSize: 14, fontWeight: '300' },
+  nodeBlock: { backgroundColor: THEME.card, marginBottom: 12, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, nodeOverlayCoord: { marginBottom: 20, borderRadius: 12, padding: 12, backgroundColor: 'rgba(255,255,255,0.05)' }, nodeOverlayCoordTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }, editCoordBtn: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 1 },   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 30, alignItems: 'center', paddingHorizontal: 20 }, nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  nodeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }, nodeIconLetter: { color: 'white', fontSize: 18, fontWeight: '700' }, nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 }, calibrationLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', marginTop: 4, letterSpacing: 4 }, nodeDirective: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 5, marginTop: 4, textTransform: 'uppercase' }, nodeDescriptionText: { color: 'white', fontSize: 14, fontWeight: '400', marginBottom: 16, lineHeight: 20 },
+  nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' }, nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 }, divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 }, nodeEditButtonRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 16 }, nodeEditButton: { alignSelf: 'flex-end' }, coordinatesLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' }, addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center',  borderRadius: 4 }, addCoordinateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   backRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, backText: { color: THEME.accent, fontSize: 14, fontWeight: '600', letterSpacing: 2 },
-  goalBlock: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: THEME.card, padding: 16, marginBottom: 12, borderRadius: 12 }, goalItem: { marginBottom: 30 }, goalName: { color: 'white', fontSize: 14, fontWeight: '600' }, goalVal: { fontWeight: '900' }, goalValueRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 }, goalValueBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginRight: 10 }, goalValueText: { fontSize: 16, fontWeight: '700' },
+  goalBlock: { backgroundColor: THEME.card, padding: 16, marginBottom: 12, borderRadius: 12 }, goalItem: { marginBottom: 30 }, goalName: { color: 'white', fontSize: 14, fontWeight: '600' }, goalVal: { fontWeight: '900' }, goalValueRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 }, goalValueBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginRight: 10 }, goalValueText: { fontSize: 16, fontWeight: '700' },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 }, sliderTrack: { flex: 1, height: 24, justifyContent: 'center' }, sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' }, sliderFill: { position: 'absolute', left: 0, top: 11, height: 2, opacity: 0.6 }, sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, borderColor: '#38BDF8', top: 6, justifyContent: 'center', alignItems: 'center', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 }, sliderHandleInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: THEME.card },
   valueCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' }, valueCircleText: { fontSize: 22, fontWeight: '200' },
-  taskFilterBar: { marginBottom: 16, marginHorizontal: -20 }, taskFilterBarContent: { paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' }, taskFilterOption: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'transparent', marginRight: 8 }, taskFilterOptionActive: { borderColor: '#E2E8F0' }, taskFilterText: { color: '#64748B', fontSize: 11, fontWeight: '700', letterSpacing: 2 }, taskFilterTextActive: { color: 'white' },
-  addTaskBtn: { marginBottom: 16, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12 }, addTaskBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  addTaskForm: { marginBottom: 16, padding: 16, borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, borderRadius: 12, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addTaskFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, addTaskNodeRow: { flexDirection: 'row', marginBottom: 16 }, addTaskNodeBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, alignItems: 'center' }, addTaskNodeBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1 }, addTaskDropdownWrap: { marginBottom: 16 }, addTaskDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4 }, addTaskDropdownTriggerText: { color: THEME.border, fontSize: 12, flex: 1 }, addTaskDropdownChevron: { marginLeft: 8 }, addTaskDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, addTaskDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, addTaskDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, addTaskCoordRow: { marginBottom: 16 }, addTaskCoordContent: { flexDirection: 'row', paddingRight: 20 }, addTaskCoordChip: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, borderWidth: 1, borderRadius: 4 }, addTaskCoordChipActive: {}, addTaskCoordChipText: { color: THEME.textDim, fontSize: 10, fontWeight: '600' }, addTaskInput: { color: 'white', fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 }, addTaskActions: { flexDirection: 'row', justifyContent: 'flex-end' }, addTaskCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 }, addTaskCancelText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 }, addTaskSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, addTaskSubmitText: { color: THEME.accent, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  taskCoordSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 }, taskCoordSeparatorLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' }, taskCoordSeparatorLabel: { fontSize: 8, color: '#E2E8F0', letterSpacing: 3, fontWeight: '600', marginHorizontal: 10 },
-  taskCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, marginBottom: 12, backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskCardPriority: { borderWidth: 1, borderColor: THEME.cardBorder, shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }, taskCardCompleted: { opacity: 0.5 }, taskIndicator: { width: 4, height: 24, marginRight: 20 }, taskCardBody: { flex: 1, flexDirection: 'column' }, taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, taskFocusBtn: { padding: 4, marginRight: 10 }, taskTitleBlock: { flex: 1 }, taskRightBlock: { flexDirection: 'row', alignItems: 'center' }, taskCheck: {}, taskPriorityLabel: { fontSize: 6, fontWeight: '700', color: THEME.accent, letterSpacing: 1, marginRight: 8 },
-  taskTitle: { color: 'white', fontSize: 14 }, taskTitleStrike: { textDecorationLine: 'line-through' }, taskGoal: { color: THEME.textDim, fontSize: 8, fontWeight: '800', marginTop: 4 },
-  taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }, taskEmptyStateText: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  taskEditCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '85%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskEditScroll: { maxHeight: 380 }, taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }, taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, taskEditNotes: { color: THEME.border, fontSize: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
-  addNodeCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 }, addNodeSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent', marginRight: 10, marginBottom: 10 }, addNodeSwatchSelected: { borderColor: '#E2E8F0' },
-  profileCard: { borderWidth: 1, borderColor: THEME.cardBorder, backgroundColor: THEME.card, marginBottom: 18, borderRadius: 12, overflow: 'hidden', padding: 24, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, profileSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, profileSectionIcon: { marginRight: 8 }, profileSectionLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, motivatorsCounter: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 1 }, motivatorsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, motivatorChip: { paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, width: '31%' }, motivatorChipActive: { borderColor: '#22C55E', backgroundColor: 'rgba(34, 197, 94, 0.15)' }, motivatorChipText: { color: THEME.textDim, fontSize: 11, fontWeight: '600' }, motivatorChipTextActive: { color: '#22C55E', fontWeight: '700' }, modelDropdownWrap: { marginTop: 4 }, modelDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: THEME.border, borderRadius: 4 }, modelDropdownTriggerText: { color: THEME.border, fontSize: 12, flex: 1 }, modelDropdownChevron: { marginLeft: 8 }, modelDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, modelDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemText: { color: THEME.textDim, fontSize: 11, fontWeight: '600' }, modelDropdownItemTextActive: { color: THEME.accent, fontWeight: '700' }, modelYouAreBlock: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }, modelYouAreLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 6 }, modelYouAreText: { color: THEME.border, fontSize: 13, lineHeight: 20, fontWeight: '400' }, profileChipScroll: {}, profileChipRow: { flexDirection: 'row', gap: 10, paddingRight: 30, marginBottom: 8 }, profileChip: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 4 }, profileChipActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, profileChipText: { color: THEME.textDim, fontSize: 12 }, profileChipTextActive: { color: THEME.accent, fontWeight: '700' }, peakPeriodRow: { flexDirection: 'row', gap: 12 }, peakBlock: { flex: 1, flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, peakBlockActive: { borderWidth: 2, borderColor: THEME.accent, shadowColor: THEME.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 }, peakBlockActiveMorning: { borderWidth: 2, borderColor: '#EAB308', backgroundColor: 'rgba(234, 179, 8, 0.12)', shadowColor: '#EAB308', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockActiveEvening: { borderWidth: 2, borderColor: '#F97316', backgroundColor: 'rgba(249, 115, 22, 0.12)', shadowColor: '#F97316', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockTitle: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2 }, peakBlockTitleActive: { color: THEME.accent }, peakBlockTitleActiveMorning: { color: '#EAB308' }, peakBlockTitleActiveEvening: { color: '#F97316' }, peakBlockSub: { color: THEME.textDim, fontSize: 9, fontWeight: '600', letterSpacing: 1, marginTop: 4 }, peakBlockSubActive: { color: 'rgba(56, 189, 248, 0.9)' }, peakBlockSubActiveMorning: { color: 'rgba(234, 179, 8, 0.95)' }, peakBlockSubActiveEvening: { color: 'rgba(249, 115, 22, 0.95)' }, profileTextArea: { borderWidth: 1, borderColor: THEME.border, borderRadius: 4, color: 'white', fontSize: 13, padding: 12, minHeight: 100, textAlignVertical: 'top' }, sectionLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', marginBottom: 20 }, pillContainer: { flexDirection: 'row', gap: 10 }, pill: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12 }, pillActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, pillText: { color: THEME.textDim, fontSize: 12 }, pillTextActive: { color: THEME.accent, fontWeight: '700' },
-  coordinateEditForm: { paddingVertical: 8 }, coordinateEditCard: { backgroundColor: THEME.card, borderWidth: 1.5, borderColor: THEME.cardBorder, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, coordEditSliderHandle: { borderColor: '#7DD3FC', borderWidth: 2.5, shadowColor: '#7DD3FC' }, coordEditNameInput: { color: '#475569', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, marginBottom: 20 }, coordEditEvidenceInput: { color: '#475569', fontSize: 14, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, marginBottom: 16 }, coordEditSliderTrack: { flex: 1, height: 16, justifyContent: 'center' }, coordEditSliderLine: { height: 1, width: '100%', backgroundColor: '#475569' }, coordEditSliderFill: { position: 'absolute', left: 0, top: 7.5, height: 1, backgroundColor: '#475569' }, coordEditDoneBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditDoneText: { color: '#475569', fontSize: 10, fontWeight: '700', letterSpacing: 2 }, coordEditAddTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 8 }, coordEditAddTaskInput: { flex: 1, color: '#475569', fontSize: 14, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditAddTaskBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12 }, coordEditTaskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingRight: 8, marginBottom: 4, borderBottomWidth: 0.5, borderBottomColor: '#475569' }, coordEditTaskTitle: { color: 'white', fontSize: 13, flex: 1, marginLeft: 10 }, editFormLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, editFormInput: { color: 'white', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 20 },
-  evidenceLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 2, marginTop: 14, marginBottom: 6 },
-  evidenceInput: { color: THEME.border, fontSize: 8, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }, evidencePreview: { color: THEME.textDim, fontSize: 10, letterSpacing: 1 },
-  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, borderTopColor: THEME.cardBorder, backgroundColor: THEME.card, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden' }, navBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, navIconWrap: { marginBottom: 6 }, navBtnText: { color: THEME.textDim, fontSize: 10, fontWeight: '800' },
+  taskFilterBar: { marginBottom: 16, marginHorizontal: -20 }, taskFilterBarContent: { paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' }, taskFilterOption: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'transparent', marginRight: 8 }, taskFilterOptionActive: { borderColor: '#E2E8F0' }, taskFilterText: { color: '#64748B', fontSize: 14, fontWeight: '700', letterSpacing: 2 }, taskFilterTextActive: { color: 'white' },
+  addTaskBtn: { marginBottom: 16, paddingVertical: 12, alignItems: 'center',  borderRadius: 12 }, addTaskBtnText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  addTaskForm: { marginBottom: 16, padding: 16, backgroundColor: THEME.card, borderRadius: 12, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addTaskFormLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, addTaskNodeRow: { flexDirection: 'row', marginBottom: 16 }, addTaskNodeBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, alignItems: 'center' }, addTaskNodeBtnText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1 }, addTaskDropdownWrap: { marginBottom: 16 }, addTaskDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4 }, addTaskDropdownTriggerText: { color: THEME.border, fontSize: 14, flex: 1 }, addTaskDropdownChevron: { marginLeft: 8 }, addTaskDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, addTaskDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, addTaskDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, addTaskCoordRow: { marginBottom: 16 }, addTaskCoordContent: { flexDirection: 'row', paddingRight: 20 }, addTaskCoordChip: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, borderWidth: 1, borderRadius: 4 }, addTaskCoordChipActive: {}, addTaskCoordChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' }, addTaskInput: { color: 'white', fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 }, addTaskActions: { flexDirection: 'row', justifyContent: 'flex-end' }, addTaskCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 }, addTaskCancelText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 }, addTaskSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }, addTaskSubmitText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  taskCoordSeparator: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 }, taskCoordSeparatorLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' }, taskCoordSeparatorLabel: { fontSize: 14, color: '#E2E8F0', letterSpacing: 3, fontWeight: '600', marginHorizontal: 10 },
+  taskCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, marginBottom: 12, backgroundColor: THEME.card, borderRadius: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskCardPriority: {  shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 }, taskCardCompleted: { opacity: 0.5 }, taskIndicator: { width: 4, height: 24, marginRight: 20 }, taskCardBody: { flex: 1, flexDirection: 'column' }, taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, taskFocusBtn: { padding: 4, marginRight: 10 }, taskTitleBlock: { flex: 1 }, taskRightBlock: { flexDirection: 'row', alignItems: 'center' }, taskCheck: {}, taskPriorityLabel: { fontSize: 14, fontWeight: '700', color: THEME.accent, letterSpacing: 1, marginRight: 8 },
+  taskTitle: { color: 'white', fontSize: 14 }, taskTitleStrike: { textDecorationLine: 'line-through' }, taskGoal: { color: THEME.textDim, fontSize: 14, fontWeight: '800', marginTop: 4 },
+  taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }, taskEmptyStateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  taskEditCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, maxWidth: 400, maxHeight: '85%', width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, taskEditScroll: { maxHeight: 380 }, taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }, taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 }, taskEditNotes: { color: THEME.border, fontSize: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
+  addNodeCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 }, addNodeSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent', marginRight: 10, marginBottom: 10 }, addNodeSwatchSelected: { borderColor: '#E2E8F0' },
+  profileCard: { backgroundColor: THEME.card, marginBottom: 18, borderRadius: 12, overflow: 'hidden', padding: 24, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, profileSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, profileSectionIcon: { marginRight: 8 }, profileSectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 }, motivatorsCounter: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1 }, motivatorsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, motivatorChip: { paddingVertical: 10, paddingHorizontal: 14,  borderRadius: 12, width: '31%' }, motivatorChipActive: { borderColor: '#22C55E', backgroundColor: 'rgba(34, 197, 94, 0.15)' }, motivatorChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' }, motivatorChipTextActive: { color: '#22C55E', fontWeight: '700' }, modelDropdownWrap: { marginTop: 4 }, modelDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: THEME.border, borderRadius: 4 }, modelDropdownTriggerText: { color: THEME.border, fontSize: 14, flex: 1 }, modelDropdownChevron: { marginLeft: 8 }, modelDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }, modelDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' }, modelDropdownItemText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' }, modelDropdownItemTextActive: { color: THEME.accent, fontWeight: '700' }, modelYouAreBlock: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }, modelYouAreLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 6 }, modelYouAreText: { color: THEME.border, fontSize: 14, lineHeight: 20, fontWeight: '400' }, profileChipScroll: {}, profileChipRow: { flexDirection: 'row', gap: 10, paddingRight: 30, marginBottom: 8 }, profileChip: { paddingVertical: 10, paddingHorizontal: 16,  borderRadius: 4 }, profileChipActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, profileChipText: { color: THEME.textDim, fontSize: 14 }, profileChipTextActive: { color: THEME.accent, fontWeight: '700' }, peakPeriodRow: { flexDirection: 'row', gap: 12 }, peakBlock: { flex: 1, flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 12,  borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, peakBlockActive: { borderWidth: 2, borderColor: THEME.accent, shadowColor: THEME.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 }, peakBlockActiveMorning: { borderWidth: 2, borderColor: '#EAB308', backgroundColor: 'rgba(234, 179, 8, 0.12)', shadowColor: '#EAB308', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockActiveEvening: { borderWidth: 2, borderColor: '#F97316', backgroundColor: 'rgba(249, 115, 22, 0.12)', shadowColor: '#F97316', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 }, peakBlockTitle: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 }, peakBlockTitleActive: { color: THEME.accent }, peakBlockTitleActiveMorning: { color: '#EAB308' }, peakBlockTitleActiveEvening: { color: '#F97316' }, peakBlockSub: { color: THEME.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginTop: 4 }, peakBlockSubActive: { color: 'rgba(56, 189, 248, 0.9)' }, peakBlockSubActiveMorning: { color: 'rgba(234, 179, 8, 0.95)' }, peakBlockSubActiveEvening: { color: 'rgba(249, 115, 22, 0.95)' }, profileTextArea: { borderWidth: 1, borderColor: THEME.border, borderRadius: 4, color: 'white', fontSize: 14, padding: 12, minHeight: 100, textAlignVertical: 'top' }, sectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', marginBottom: 20 }, pillContainer: { flexDirection: 'row', gap: 10 }, pill: { paddingVertical: 10, paddingHorizontal: 20,  borderRadius: 12 }, pillActive: { borderColor: THEME.accent, backgroundColor: 'rgba(56, 189, 248, 0.1)' }, pillText: { color: THEME.textDim, fontSize: 14 }, pillTextActive: { color: THEME.accent, fontWeight: '700' },
+  coordinateEditForm: { paddingVertical: 8 }, coordinateEditCard: { backgroundColor: THEME.card,  borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, coordEditSliderHandle: { borderColor: '#7DD3FC', borderWidth: 2.5, shadowColor: '#7DD3FC' }, coordEditNameInput: { color: '#475569', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, marginBottom: 20 }, coordEditEvidenceInput: { color: '#475569', fontSize: 14, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, marginBottom: 16 }, coordEditSliderTrack: { flex: 1, height: 16, justifyContent: 'center' }, coordEditSliderLine: { height: 1, width: '100%', backgroundColor: '#475569' }, coordEditSliderFill: { position: 'absolute', left: 0, top: 7.5, height: 1, backgroundColor: '#475569' }, coordEditDoneBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditDoneText: { color: '#475569', fontSize: 14, fontWeight: '700', letterSpacing: 2 }, coordEditAddTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 8 }, coordEditAddTaskInput: { flex: 1, color: '#475569', fontSize: 14, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#475569', borderRadius: 12 }, coordEditAddTaskBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12 }, coordEditTaskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' }, coordEditTaskTitle: { color: 'white', fontSize: 14, flex: 1, marginLeft: 10 }, editFormLabel: { color: 'white', fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }, editFormInput: { color: 'white', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 20 },
+  evidenceLabel: { color: 'white', fontSize: 14, fontWeight: '700', letterSpacing: 2, marginTop: 14, marginBottom: 6 },
+  evidenceInput: { color: THEME.border, fontSize: 14, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)' }, evidencePreview: { color: THEME.textDim, fontSize: 14, letterSpacing: 1 },
+  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, borderTopColor: THEME.cardBorder, backgroundColor: THEME.card, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden', paddingHorizontal: 16 }, navBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }, navIconWrap: {},
   copilotFab: { position: 'absolute', bottom: 120, right: 20, width: 48, height: 48, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center', overflow: 'visible' }, copilotFabLocked: { opacity: 0.5 },
   copilotContainer: { width: 48, height: 48, backgroundColor: 'transparent', overflow: 'visible', position: 'relative', justifyContent: 'center', alignItems: 'center' },
-  copilotOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }, copilotCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, copilotCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }, copilotTitle: { color: THEME.accent, fontSize: 11, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }, copilotCloseX: { color: THEME.border, fontSize: 16, fontWeight: '600' }, copilotHeading: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 }, copilotBriefingLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 8 }, copilotBriefingPrefix: { fontWeight: '700', color: '#94A3B8', fontSize: 12, letterSpacing: 2 }, copilotBriefingBody: { flex: 1, color: THEME.border, fontSize: 12, letterSpacing: 2, lineHeight: 18 }, copilotBriefingNum: { fontWeight: '700', color: '#FFFFFF' }, copilotSuggestionBtn: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, copilotSuggestionBtnText: { color: THEME.border, fontSize: 11, fontWeight: '700', letterSpacing: 2 },
-  systemAccessOverlay: { flex: 1, backgroundColor: 'rgba(21,34,56,0.96)', justifyContent: 'center', alignItems: 'center', padding: 24 }, systemAccessCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, systemAccessTitle: { color: '#E2E8F0', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }, systemAccessFeature: { color: THEME.border, fontSize: 11, fontWeight: '600', letterSpacing: 1, marginTop: 6 }, systemAccessTiers: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(226,232,240,0.3)' }, systemAccessTier: { color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 2 }, systemAccessBtnPrimary: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnSecondary: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnText: { color: '#E2E8F0', fontSize: 11, fontWeight: '700', letterSpacing: 2 }, devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 }, devOverrideLabel: { color: THEME.textDim, fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 10 }, devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  systemBriefingCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: THEME.cardBorder, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, systemBriefingHeader: { marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' }, systemBriefingTitle: { color: '#E2E8F0', fontSize: 10, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }, systemBriefingPrimary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }, systemBriefingLabel: { color: THEME.textDim, fontSize: 8, fontWeight: '700', letterSpacing: 3, marginBottom: 4 }, systemBriefingIntensity: { color: 'white', fontSize: 36, fontWeight: '200' }, systemBriefingStatusWrap: { alignItems: 'flex-end' }, systemBriefingStatusBadge: { fontSize: 11, fontWeight: '800', letterSpacing: 2 }, systemBriefingStatusOpt: { color: '#22C55E' }, systemBriefingStatusNom: { color: '#E2E8F0' }, systemBriefingStatusCrit: { color: '#FB7185' }, systemBriefingDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 12 }, systemBriefingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, systemBriefingMetaLabel: { color: THEME.textDim, fontSize: 9, fontWeight: '700', letterSpacing: 2 }, systemBriefingMetaValue: { color: THEME.border, fontSize: 11, fontWeight: '600', letterSpacing: 1 }, systemBriefingAlert: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 2, borderLeftColor: THEME.accent, backgroundColor: 'rgba(56,189,248,0.06)' }, systemBriefingAlertText: { color: THEME.border, fontSize: 10, fontWeight: '700', letterSpacing: 1 }
+  copilotOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(15, 23, 42, 0.85)' }, copilotCard: { backgroundColor: THEME.card, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, copilotCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }, copilotTitle: { color: THEME.accent, fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }, copilotCloseX: { color: THEME.border, fontSize: 16, fontWeight: '600' }, copilotHeading: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginTop: 12, marginBottom: 8 }, copilotBriefingLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 8 }, copilotBriefingPrefix: { fontWeight: '700', color: '#94A3B8', fontSize: 14, letterSpacing: 2 }, copilotBriefingBody: { flex: 1, color: THEME.border, fontSize: 14, letterSpacing: 2, lineHeight: 18 }, copilotBriefingNum: { fontWeight: '700', color: '#FFFFFF' }, copilotSuggestionBtn: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, copilotSuggestionBtnText: { color: THEME.border, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  systemAccessOverlay: { flex: 1, backgroundColor: 'rgba(21,34,56,0.96)', justifyContent: 'center', alignItems: 'center', padding: 24 }, systemAccessCard: { backgroundColor: THEME.card,  borderRadius: 12, padding: 24, maxWidth: 360, width: '100%', shadowColor: THEME.glowPop, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 }, systemAccessTitle: { color: '#E2E8F0', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase', marginBottom: 16, textAlign: 'center' }, systemAccessFeature: { color: THEME.border, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginTop: 6 }, systemAccessTiers: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(226,232,240,0.3)' }, systemAccessTier: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 }, systemAccessBtnPrimary: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnSecondary: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' }, systemAccessBtnText: { color: '#E2E8F0', fontSize: 14, fontWeight: '700', letterSpacing: 2 }, devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 }, devOverrideLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 10 }, devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  systemBriefingStatusOpt: { color: '#22C55E' }, systemBriefingStatusNom: { color: '#E2E8F0' }, systemBriefingStatusCrit: { color: '#FB7185' },
+  systemManifestCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  systemManifestPrimaryRow: { flexDirection: 'row', alignItems: 'stretch' },
+  systemManifestLeft: { flex: 1, justifyContent: 'center' },
+  systemManifestBracketLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
+  systemManifestBracketWrap: { flexDirection: 'row', alignItems: 'baseline' },
+  systemManifestBracket: { color: 'rgba(226,232,240,0.6)', fontSize: 18, fontWeight: '300' },
+  systemManifestBracketValue: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 2 },
+  systemManifestVLine: { width: 0.5, backgroundColor: 'rgba(226,232,240,0.5)', marginHorizontal: 16 },
+  systemManifestStatusBlock: { alignItems: 'flex-end', justifyContent: 'center', paddingLeft: 8 },
+  systemManifestStatusBadge: { fontSize: 14, fontWeight: '800', letterSpacing: 2 },
+  deflectionCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  deflectionRow: { flexDirection: 'row', alignItems: 'stretch' },
+  deflectionLeft: { flex: 1, justifyContent: 'center' },
+  deflectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
+  deflectionValue: { color: 'white', fontSize: 28, fontWeight: '200', letterSpacing: 2 },
+  deflectionVLine: { width: 0.5, backgroundColor: 'rgba(226,232,240,0.5)', marginHorizontal: 16 },
+  deflectionRight: { alignItems: 'center', justifyContent: 'center', paddingLeft: 8 },
+  summaryCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  summaryHeading: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginTop: 4, marginBottom: 18 },
+  summarySuggestionSection: { borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 10, padding: 14, marginBottom: 12 },
+  summarySuggestionLabel: { color: THEME.border, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginBottom: 14 },
+  summarySuggestionBtn: { paddingVertical: 10, paddingHorizontal: 16,  borderRadius: 12, alignSelf: 'flex-start' },
+  summarySuggestionBtnText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 }
 });

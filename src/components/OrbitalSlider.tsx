@@ -65,8 +65,12 @@ export function OrbitalSlider({
 
   const pan = React.useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      // Capture phase — intercept before ScrollView can claim the gesture
+      onStartShouldSetPanResponder:         () => true,
+      onStartShouldSetPanResponderCapture:  () => true,
+      onMoveShouldSetPanResponder:          () => true,
+      onMoveShouldSetPanResponderCapture:   () => true,
+      onPanResponderTerminationRequest:     () => false, // don't yield once we have it
       onPanResponderGrant: (evt) =>
         onChangeRef.current(touchToValue(cx, cy, evt.nativeEvent.locationX, evt.nativeEvent.locationY)),
       onPanResponderMove: (evt) =>

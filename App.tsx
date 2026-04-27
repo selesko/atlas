@@ -40,6 +40,10 @@ export default function App() {
   // — copilot animation state —
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotTransition, setCopilotTransition] = useState(false);
+
+  // — AI briefing state (null = not fetched, 'loading' = in-flight, object = ready) —
+  type AiBriefing = { briefingLines: { prefix: string; text: string }[]; suggest1: CopilotSuggestion; suggest2: CopilotSuggestion };
+  const [aiBriefing, setAiBriefing] = useState<null | 'loading' | AiBriefing>(null);
   const [copilotOrbitAngle, setCopilotOrbitAngle] = useState(0);
   const copilotOrbitAnim = useRef(new Animated.Value(0)).current;
   const copilotSunburstAnim = useRef(new Animated.Value(0)).current;
@@ -65,7 +69,7 @@ export default function App() {
     cognitiveModel, peakPeriod, motivators,
     updateValue, updateNode, addNode: storeAddNode, saveTaskEdit,
     toggleTask, getNodeAvg,
-    setSession,
+    setSession, loadUserData,
   } = useAppStore();
 
   // — sync edit node form when editingNodeId changes —
@@ -85,6 +89,7 @@ export default function App() {
       if (!mounted) return;
       setSession(data.session);
       setHeaderSubtitle(data.session ? HEADER_CONNECTED : pickHeaderFallback());
+      if (data.session) loadUserData();
     }).catch(() => {
       if (mounted) setHeaderSubtitle(pickHeaderFallback());
     });
@@ -94,6 +99,7 @@ export default function App() {
       if (!mounted) return;
       setSession(newSession);
       setHeaderSubtitle(newSession ? HEADER_CONNECTED : pickHeaderFallback());
+      if (newSession) loadUserData();
       if (!newSession) setAuthOpen(false);
     });
 
@@ -124,6 +130,18 @@ export default function App() {
       });
     });
   }, [hasAccess]);
+
+  // — AI briefing fetch — fires when copilot opens while signed in —
+  useEffect(() => {
+    if (!copilotOpen || !session) { setAiBriefing(null); return; }
+    setAiBriefing('loading');
+    supabase.functions.invoke('calibra-ai', {
+      body: { nodes, cognitiveModel, peakPeriod, motivators },
+    }).then(({ data, error }) => {
+      if (error || !data?.briefingLines) { setAiBriefing(null); return; }
+      setAiBriefing(data as AiBriefing);
+    }).catch(() => setAiBriefing(null));
+  }, [copilotOpen, session]);
 
   // — copilot content —
   const copilotContent = useMemo(() => {
@@ -686,41 +704,49 @@ export default function App() {
         <View style={styles.copilotOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCopilotOpen(false)} activeOpacity={1} />
           <FadingBorder style={{ maxWidth: 400, width: '100%' }}>
-            <View style={styles.copilotCard} pointerEvents="auto">
-              <View style={styles.copilotCardHeader}>
-                <Text style={styles.copilotTitle}>CO-PILOT // V1.0</Text>
-                <TouchableOpacity onPress={() => setCopilotOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={styles.copilotCloseX}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.copilotHeading, { marginTop: 0 }]}>BRIEFING</Text>
-              {copilotContent.briefingLines.map((line, lineIdx) => {
-                const parts = line.text.split(briefingHighlight.re).filter(Boolean);
-                return (
-                  <View key={lineIdx} style={styles.copilotBriefingLine}>
-                    <Text style={styles.copilotBriefingPrefix}>{line.prefix} </Text>
-                    <Text style={styles.copilotBriefingBody}>
-                      {parts.map((part, i) => {
-                        if (/^\d+\.?\d*$/.test(part)) return <Text key={i} style={styles.copilotBriefingNum}>{part}</Text>;
-                        const col = briefingHighlight.wordToColor[part.toUpperCase()];
-                        return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
-                      })}
-                    </Text>
+            {(() => {
+              const displayContent = (aiBriefing && aiBriefing !== 'loading') ? aiBriefing : copilotContent;
+              const isLoading = aiBriefing === 'loading';
+              return (
+                <View style={styles.copilotCard} pointerEvents="auto">
+                  <View style={styles.copilotCardHeader}>
+                    <Text style={styles.copilotTitle}>CO-PILOT // V1.0</Text>
+                    <TouchableOpacity onPress={() => setCopilotOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+                      <Text style={styles.copilotCloseX}>✕</Text>
+                    </TouchableOpacity>
                   </View>
-                );
-              })}
-              <Text style={styles.copilotHeading}>SUGGESTIONS</Text>
-              {[copilotContent.suggest1, copilotContent.suggest2].map((sug, idx) => (
-                <TouchableOpacity key={idx} style={styles.copilotSuggestionBtn} onPress={() => { setCopilotOpen(false); handleSuggestion(sug); }} activeOpacity={0.8}>
-                  <Text style={styles.copilotSuggestionBtnText}>
-                    {sug.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
-                      const col = briefingHighlight.wordToColor[part.toUpperCase()];
-                      return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
-                    })}
+                  <Text style={[styles.copilotHeading, { marginTop: 0 }]}>
+                    {isLoading ? 'BRIEFING  ···' : 'BRIEFING'}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  {displayContent.briefingLines.map((line, lineIdx) => {
+                    const parts = line.text.split(briefingHighlight.re).filter(Boolean);
+                    return (
+                      <View key={lineIdx} style={[styles.copilotBriefingLine, isLoading && { opacity: 0.4 }]}>
+                        <Text style={styles.copilotBriefingPrefix}>{line.prefix} </Text>
+                        <Text style={styles.copilotBriefingBody}>
+                          {parts.map((part, i) => {
+                            if (/^\d+\.?\d*$/.test(part)) return <Text key={i} style={styles.copilotBriefingNum}>{part}</Text>;
+                            const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                            return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
+                          })}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  <Text style={styles.copilotHeading}>SUGGESTIONS</Text>
+                  {[displayContent.suggest1, displayContent.suggest2].map((sug, idx) => (
+                    <TouchableOpacity key={idx} style={[styles.copilotSuggestionBtn, isLoading && { opacity: 0.4 }]} onPress={() => { if (!isLoading) { setCopilotOpen(false); handleSuggestion(sug); } }} activeOpacity={0.8}>
+                      <Text style={styles.copilotSuggestionBtnText}>
+                        {sug.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
+                          const col = briefingHighlight.wordToColor[part.toUpperCase()];
+                          return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
+                        })}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })()}
           </FadingBorder>
         </View>
       </Modal>

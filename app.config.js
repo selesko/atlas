@@ -7,19 +7,22 @@ export default {
   orientation: 'portrait',
   icon: './assets/icons/icon.png',
   splash: {
+    image: './assets/icons/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#08080F',
   },
   ios: {
     bundleIdentifier: 'com.calibra.app',
     buildNumber: '1',
     supportsTablet: false,
+    privacyManifests: {},
   },
   android: {
     package: 'com.calibra.app',
     versionCode: 1,
     adaptiveIcon: {
-      backgroundColor: '#ffffff',
+      foregroundImage: './assets/icons/icon.png',
+      backgroundColor: '#08080F',
     },
   },
   extra: {

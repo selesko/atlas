@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated, Modal, PanResponder, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated, Modal } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { TaskFilter } from '../types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { OrbitalSlider } from '../components/OrbitalSlider';
 
 interface TasksScreenProps {
   addTaskOpen: boolean;
@@ -45,22 +44,6 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   };
   const [scoreReflection, setScoreReflection] = useState<ScoreReflection | null>(null);
   const [reflectionValue, setReflectionValue] = useState(5);
-  const reflectionTrackWidth = useRef(0);
-  const reflectionSliderPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const w = reflectionTrackWidth.current || SCREEN_WIDTH - 80;
-        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
-        setReflectionValue(Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1)));
-      },
-      onPanResponderMove: (evt) => {
-        const w = reflectionTrackWidth.current || SCREEN_WIDTH - 80;
-        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
-        setReflectionValue(Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1)));
-      },
-    })
-  ).current;
 
   const showNudge = (nodeId: string, goalId: string, goalName: string, color: string) => {
     if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
@@ -314,26 +297,14 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
                 {'\n'}forward?
               </Text>
 
-              {/* Value display */}
-              <View style={styles.reflectionValueRow}>
-                <Text style={styles.reflectionValueOld}>{scoreReflection.currentValue}</Text>
-                <Text style={styles.reflectionArrow}>→</Text>
-                <Text style={[styles.reflectionValueNew, { color: reflectionValue > scoreReflection.currentValue ? '#4ade80' : reflectionValue < scoreReflection.currentValue ? '#fb7185' : THEME.textDim }]}>
-                  {reflectionValue}
-                </Text>
-              </View>
-
-              {/* Slider */}
-              <View
-                style={styles.reflectionSliderTrack}
-                onLayout={e => { reflectionTrackWidth.current = e.nativeEvent.layout.width; }}
-                {...reflectionSliderPan.panHandlers}
-              >
-                <View style={[styles.reflectionSliderLine, { backgroundColor: scoreReflection.nodeColor, opacity: 0.25 }]} />
-                <View style={[styles.reflectionSliderFill, { width: `${reflectionValue * 10}%`, backgroundColor: scoreReflection.nodeColor }]} />
-                <View style={[styles.reflectionSliderHandle, { left: `${reflectionValue * 10}%`, borderColor: scoreReflection.nodeColor }]}>
-                  <View style={[styles.reflectionSliderHandleInner, { backgroundColor: scoreReflection.nodeColor }]} />
-                </View>
+              {/* Orbital dial */}
+              <View style={{ alignItems: 'center', marginBottom: 8 }}>
+                <OrbitalSlider
+                  value={reflectionValue}
+                  color={scoreReflection.nodeColor}
+                  size={200}
+                  onValueChange={setReflectionValue}
+                />
               </View>
 
               {/* Actions */}

@@ -395,6 +395,7 @@ export default function App() {
                   setEditingTask({ nodeId, goalId, taskId });
                 }
               }}
+              onOpenCoordEdit={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
             />
           )}
           {activeTab === 'Profile' && (

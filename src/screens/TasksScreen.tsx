@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { useAppStore } from '../stores/useAppStore';
@@ -13,6 +13,7 @@ interface TasksScreenProps {
   setAddTaskTarget: (v: { nodeId: string; goalId: string } | null) => void;
   selectedNodeId: string | null;
   onOpenEditTask: (nodeId: string, goalId: string, taskId: string) => void;
+  onOpenCoordEdit: (nodeId: string, goalId: string) => void;
 }
 
 export const TasksScreen: React.FC<TasksScreenProps> = ({
@@ -22,12 +23,47 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   setAddTaskTarget,
   selectedNodeId,
   onOpenEditTask,
+  onOpenCoordEdit,
 }) => {
   const { nodes, toggleTask, togglePriority } = useAppStore();
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('ALL');
   const [addTaskTitle, setAddTaskTitle] = useState('');
   const [addTaskCoordDropdownOpen, setAddTaskCoordDropdownOpen] = useState(false);
   const { addTask } = useAppStore();
+
+  // — evidence nudge state —
+  const [nudge, setNudge] = useState<{ nodeId: string; goalId: string; goalName: string; color: string } | null>(null);
+  const nudgeAnim = useRef(new Animated.Value(0)).current;
+  const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNudge = (nodeId: string, goalId: string, goalName: string, color: string) => {
+    if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
+    setNudge({ nodeId, goalId, goalName, color });
+    nudgeAnim.setValue(0);
+    Animated.spring(nudgeAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }).start();
+    nudgeTimer.current = setTimeout(() => dismissNudge(), 4000);
+  };
+
+  const dismissNudge = () => {
+    Animated.timing(nudgeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setNudge(null));
+  };
+
+  useEffect(() => () => { if (nudgeTimer.current) clearTimeout(nudgeTimer.current); }, []);
+
+  const handleToggleTask = (nodeId: string, goalId: string, taskId: string) => {
+    // Check current state before toggle to detect completion
+    const task = nodes
+      .find(n => n.id === nodeId)?.goals
+      .find(g => g.id === goalId)?.tasks
+      .find(t => t.id === taskId);
+    const wasIncomplete = task && !task.completed;
+    toggleTask(nodeId, goalId, taskId);
+    if (wasIncomplete) {
+      const node = nodes.find(n => n.id === nodeId);
+      const goal = node?.goals.find(g => g.id === goalId);
+      if (node && goal) showNudge(nodeId, goalId, goal.name, node.color);
+    }
+  };
 
   const isFocusFilter = taskFilter === 'FOCUS';
   const isAllFilter = taskFilter === 'ALL';
@@ -208,7 +244,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
                         <View style={styles.taskRightBlock}>
                           {pri && <Text style={styles.taskPriorityLabel}>PRIORITY</Text>}
                           <TouchableOpacity
-                            onPress={() => toggleTask(grp.nodeId, grp.goalId, t.id)}
+                            onPress={() => handleToggleTask(grp.nodeId, grp.goalId, t.id)}
                             activeOpacity={0.8}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           >
@@ -232,6 +268,36 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
             })}
           </View>
         ))
+      )}
+      {/* Evidence nudge bar */}
+      {nudge && (
+        <Animated.View style={[
+          styles.nudgeBar,
+          { borderLeftColor: nudge.color },
+          {
+            opacity: nudgeAnim,
+            transform: [{ translateY: nudgeAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+          },
+        ]}>
+          <View style={styles.nudgeContent}>
+            <View style={[styles.nudgeDot, { backgroundColor: nudge.color }]} />
+            <Text style={styles.nudgeText} numberOfLines={1}>
+              Log evidence for <Text style={[styles.nudgeGoal, { color: nudge.color }]}>{nudge.goalName}</Text>?
+            </Text>
+          </View>
+          <View style={styles.nudgeActions}>
+            <TouchableOpacity
+              onPress={() => { dismissNudge(); onOpenCoordEdit(nudge.nodeId, nudge.goalId); }}
+              style={styles.nudgeActionBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.nudgeActionText, { color: nudge.color }]}>LOG  →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={dismissNudge} style={styles.nudgeDismiss} activeOpacity={0.6}>
+              <Text style={styles.nudgeDismissText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -283,4 +349,14 @@ const styles = StyleSheet.create({
   taskGoal: { color: THEME.textDim, fontSize: 14, fontWeight: '800', marginTop: 4 },
   taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   taskEmptyStateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  nudgeBar: { marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0c1420', borderRadius: 10, borderLeftWidth: 3, paddingVertical: 12, paddingHorizontal: 14 },
+  nudgeContent: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  nudgeDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  nudgeText: { fontSize: 13, color: '#8888aa', flex: 1 },
+  nudgeGoal: { fontWeight: '700' },
+  nudgeActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  nudgeActionBtn: { paddingVertical: 4, paddingHorizontal: 10 },
+  nudgeActionText: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  nudgeDismiss: { paddingVertical: 4, paddingHorizontal: 8 },
+  nudgeDismissText: { fontSize: 12, color: '#444466' },
 });

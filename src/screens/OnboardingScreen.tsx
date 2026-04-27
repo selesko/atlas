@@ -13,33 +13,68 @@ const { width, height } = Dimensions.get('window');
 
 const TOTAL_STEPS = 6;
 
-// ─── Solar Mark (consistent with icon) ────────────────────────────────────────
+// ─── Solar Mark — planet orbits the sun when animated ─────────────────────────
 function SolarMark({ size = 64, animated = false }: { size?: number; animated?: boolean }) {
   const pulse = useRef(new Animated.Value(1)).current;
+  const orbitAngle = useRef(new Animated.Value(-42)).current; // start at icon's canonical position
+  const [planetPos, setPlanetPos] = useState(() => {
+    const r = size / 2;
+    const orbitR = r * 0.76;
+    const rad = (-42 * Math.PI) / 180;
+    return { px: r + orbitR * Math.cos(rad), py: r + orbitR * Math.sin(rad) };
+  });
+
   useEffect(() => {
     if (!animated) return;
+
+    const r = size / 2;
+    const orbitR = r * 0.76;
+
+    // Track planet position from angle value
+    const listenerId = orbitAngle.addListener(({ value }) => {
+      const rad = (value * Math.PI) / 180;
+      setPlanetPos({ px: r + orbitR * Math.cos(rad), py: r + orbitR * Math.sin(rad) });
+    });
+
+    // Orbit: full 360° loop over 7s
+    Animated.loop(
+      Animated.timing(orbitAngle, {
+        toValue: -42 + 360,
+        duration: 7000,
+        useNativeDriver: false,
+      })
+    ).start();
+
+    // Subtle pulse on the whole mark
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.06, duration: 2200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 2200, useNativeDriver: true }),
       ])
     ).start();
+
+    return () => {
+      orbitAngle.removeListener(listenerId);
+      orbitAngle.stopAnimation();
+      pulse.stopAnimation();
+    };
   }, [animated]);
 
   const r = size / 2;
   const orbitR = r * 0.76;
-  const planetAngle = -42 * (Math.PI / 180);
-  const px = r + orbitR * Math.cos(planetAngle);
-  const py = r + orbitR * Math.sin(planetAngle);
 
   return (
     <Animated.View style={{ transform: [{ scale: pulse }] }}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Orbit ring */}
         <Circle cx={r} cy={r} r={orbitR} stroke="#7C6AF7" strokeWidth={size * 0.036} opacity={0.9} fill="none" />
+        {/* Sun glow layers */}
         <Circle cx={r} cy={r} r={orbitR * 0.66} fill="#7C6AF7" opacity={0.18} />
         <Circle cx={r} cy={r} r={orbitR * 0.44} fill="#7C6AF7" opacity={0.25} />
+        {/* Sun core */}
         <Circle cx={r} cy={r} r={orbitR * 0.31} fill="white" />
-        <Circle cx={px} cy={py} r={size * 0.072} fill="white" />
+        {/* Planet — position driven by animated angle */}
+        <Circle cx={planetPos.px} cy={planetPos.py} r={size * 0.072} fill="white" />
       </Svg>
     </Animated.View>
   );

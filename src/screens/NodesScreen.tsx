@@ -75,6 +75,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   onPanResponderGrant: applySlider,
                   onPanResponderMove: applySlider,
                 });
+                const hasEvidence = !!goal.evidence?.trim();
                 return (
                   <View key={goal.id} style={styles.nodeOverlayCoord}>
                     <View style={styles.nodeOverlayCoordTitleRow}>
@@ -83,6 +84,23 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                         <Text style={styles.editCoordBtn}>Edit</Text>
                       </TouchableOpacity>
                     </View>
+
+                    {/* Evidence status row */}
+                    <TouchableOpacity
+                      onPress={() => onOpenCoordEdit(node.id, goal.id)}
+                      activeOpacity={0.7}
+                      style={styles.evidenceRow}
+                    >
+                      <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
+                      {hasEvidence ? (
+                        <Text style={[styles.evidenceText, { color: node.color + 'cc' }]} numberOfLines={1}>
+                          {goal.evidence!.trim()}
+                        </Text>
+                      ) : (
+                        <Text style={styles.evidenceMissing}>LOG EVIDENCE  →</Text>
+                      )}
+                    </TouchableOpacity>
+
                     <View style={styles.sliderRow}>
                       <View
                         style={styles.sliderTrack}
@@ -148,6 +166,10 @@ const styles = StyleSheet.create({
   nodeOverlayCoordTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   editCoordBtn: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
   goalName: { color: 'white', fontSize: 14, fontWeight: '600' },
+  evidenceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  evidenceDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  evidenceText: { fontSize: 11, fontWeight: '500', letterSpacing: 0.3, flex: 1 },
+  evidenceMissing: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: '#f59e0b' },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
   sliderTrack: { flex: 1, height: 24, justifyContent: 'center' },
   sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' },

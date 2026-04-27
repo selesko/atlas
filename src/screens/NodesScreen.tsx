@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { Node, Goal } from '../types';
@@ -49,40 +48,6 @@ function getMomentumGlow(momentum: number): { color: string; opacity: number } {
   return { color: '#000', opacity: 0 };
 }
 
-// ─── A: Mini Sparkline ─────────────────────────────────────────────────────────
-function Sparkline({ goal, color }: { goal: Goal; color: string }) {
-  const hist = goal.scoreHistory;
-  if (!hist || hist.length < 2) return null;
-
-  const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
-  const W = 36, H = 16;
-  const vals = sorted.map(e => e.value);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const range = max - min || 1;
-
-  const points = vals.map((v, i) => {
-    const x = (i / (vals.length - 1)) * W;
-    const y = H - ((v - min) / range) * H;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-
-  const momentum = getMomentum(goal);
-  const lineColor = momentum > 0.15 ? '#4ade80' : momentum < -0.15 ? '#fb7185' : '#ffffff33';
-
-  return (
-    <Svg width={W} height={H} style={{ opacity: 0.75 }}>
-      <Polyline
-        points={points}
-        fill="none"
-        stroke={lineColor}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 interface NodesScreenProps {
   selectedNodeId: string | null;
@@ -173,16 +138,16 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                       },
                     ]}
                   >
-                    {/* Title row: name + evidence dot + sparkline */}
+                    {/* Title row: name + evidence dot + value */}
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
                         <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
                         <Text style={styles.goalName}>{goal.name}</Text>
                       </View>
-                      <Sparkline goal={goal} color={node.color} />
+                      <Text style={[styles.coordValue, { color: sliderColor }]}>{goal.value}</Text>
                     </View>
 
-                    {/* Slider — no value circle */}
+                    {/* Slider */}
                     <View style={styles.sliderRow}>
                       <View
                         style={styles.sliderTrack}
@@ -258,6 +223,7 @@ const styles = StyleSheet.create({
   sliderHandleInner: { width: 6, height: 6, borderRadius: 3 },
   valueCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
   valueCircleText: { fontSize: 22, fontWeight: '200' },
+  coordValue: { fontSize: 20, fontWeight: '200', opacity: 0.9 },
   addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
   addCoordinateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
 });

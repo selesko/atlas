@@ -1,49 +1,86 @@
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { Node, Goal } from '../types';
 
 const { width } = Dimensions.get('window');
 
-// ─── Score history helpers ─────────────────────────────────────────────────────
+// ─── Momentum helpers ──────────────────────────────────────────────────────────
 
-/** Returns the 7-day delta for a coordinate: newest value − oldest value */
-function getCoordDelta(goal: Goal): number | null {
+/** -1 to +1 momentum score based on 7-day history */
+function getMomentum(goal: Goal): number {
+  const hist = goal.scoreHistory;
+  if (!hist || hist.length < 2) return 0;
+  const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date));
+  const delta = sorted[sorted.length - 1].value - sorted[0].value;
+  return Math.max(-1, Math.min(1, delta / 4)); // normalise: ±4 pts = full signal
+}
+
+/** Average momentum across all coordinates in a node */
+function getNodeMomentum(node: Node): number {
+  if (node.goals.length === 0) return 0;
+  return node.goals.reduce((acc, g) => acc + getMomentum(g), 0) / node.goals.length;
+}
+
+/** Interpolate between two hex colors by t (0→1) */
+function lerpColor(a: string, b: string, t: number): string {
+  const h = (s: string) => parseInt(s.slice(1), 16);
+  const ar = (h(a) >> 16) & 0xff, ag = (h(a) >> 8) & 0xff, ab = h(a) & 0xff;
+  const br = (h(b) >> 16) & 0xff, bg = (h(b) >> 8) & 0xff, bb = h(b) & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bv = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${bv.toString(16).padStart(2,'0')}`;
+}
+
+/** Slider fill color: node color → warm green (up) or cool rose (down) */
+function getMomentumSliderColor(nodeColor: string, momentum: number): string {
+  if (momentum > 0.15) return lerpColor(nodeColor, '#4ade80', Math.min(1, momentum * 1.2));
+  if (momentum < -0.15) return lerpColor(nodeColor, '#fb7185', Math.min(1, Math.abs(momentum) * 1.2));
+  return nodeColor;
+}
+
+/** Card glow shadow color and opacity based on momentum */
+function getMomentumGlow(momentum: number): { color: string; opacity: number } {
+  if (momentum > 0.15) return { color: '#4ade80', opacity: Math.min(0.45, momentum * 0.6) };
+  if (momentum < -0.15) return { color: '#fb7185', opacity: Math.min(0.3, Math.abs(momentum) * 0.4) };
+  return { color: '#000', opacity: 0 };
+}
+
+// ─── A: Mini Sparkline ─────────────────────────────────────────────────────────
+function Sparkline({ goal, color }: { goal: Goal; color: string }) {
   const hist = goal.scoreHistory;
   if (!hist || hist.length < 2) return null;
-  const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date));
-  return sorted[sorted.length - 1].value - sorted[0].value;
-}
 
-/** Returns the average delta across all coordinates in a node */
-function getNodeDelta(node: Node): number | null {
-  const deltas = node.goals.map(getCoordDelta).filter((d): d is number => d !== null);
-  if (deltas.length === 0) return null;
-  return deltas.reduce((a, b) => a + b, 0) / deltas.length;
-}
+  const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
+  const W = 36, H = 16;
+  const vals = sorted.map(e => e.value);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
 
-/** Renders a delta badge: ↑ +1.5 / ↓ -1.2 / nothing if flat */
-function DeltaBadge({ delta, color }: { delta: number | null; color: string }) {
-  if (delta === null || Math.abs(delta) < 0.2) return null;
-  const up = delta > 0;
-  const label = `${up ? '↑' : '↓'} ${up ? '+' : ''}${delta.toFixed(1)}`;
+  const points = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const momentum = getMomentum(goal);
+  const lineColor = momentum > 0.15 ? '#4ade80' : momentum < -0.15 ? '#fb7185' : '#ffffff33';
+
   return (
-    <Text style={[styles.deltaBadge, { color: up ? '#4ade80' : '#fb7185' }]}>
-      {label}
-    </Text>
-  );
-}
-
-/** Small trend arrow for node header */
-function TrendArrow({ delta }: { delta: number | null }) {
-  if (delta === null || Math.abs(delta) < 0.2) return null;
-  const up = delta > 0;
-  return (
-    <Text style={[styles.trendArrow, { color: up ? '#4ade8088' : '#fb718588' }]}>
-      {up ? '↑' : '↓'}
-    </Text>
+    <Svg width={W} height={H} style={{ opacity: 0.75 }}>
+      <Polyline
+        points={points}
+        fill="none"
+        stroke={lineColor}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
 
@@ -87,10 +124,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   )}
                 </View>
               </View>
-              <View style={styles.nodeScoreBlock}>
-                <TrendArrow delta={getNodeDelta(node)} />
-                <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
-              </View>
+              <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
             </View>
           </TouchableOpacity>
 
@@ -119,12 +153,28 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   onPanResponderMove: applySlider,
                 });
                 const hasEvidence = !!goal.evidence?.trim();
+                const momentum = getMomentum(goal);
+                const glow = getMomentumGlow(momentum);
+                const sliderColor = getMomentumSliderColor(node.color, momentum);
                 return (
-                  <View key={goal.id} style={styles.nodeOverlayCoord}>
+                  <View
+                    key={goal.id}
+                    style={[
+                      styles.nodeOverlayCoord,
+                      glow.opacity > 0 && {
+                        shadowColor: glow.color,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: glow.opacity,
+                        shadowRadius: 10,
+                        borderWidth: 1,
+                        borderColor: glow.color + '28',
+                      },
+                    ]}
+                  >
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
                         <Text style={styles.goalName}>{goal.name}</Text>
-                        <DeltaBadge delta={getCoordDelta(goal)} color={node.color} />
+                        <Sparkline goal={goal} color={node.color} />
                       </View>
                       <TouchableOpacity onPress={() => onOpenCoordEdit(node.id, goal.id)} activeOpacity={0.8}>
                         <Text style={styles.editCoordBtn}>Edit</Text>
@@ -153,8 +203,8 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                         onLayout={(e) => { trackWidths.current[key] = e.nativeEvent.layout.width; }}
                         {...pan.panHandlers}
                       >
-                        <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.3 }]} />
-                        <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
+                        <View style={[styles.sliderLine, { backgroundColor: sliderColor, opacity: 0.3 }]} />
+                        <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: sliderColor }]} />
                         <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
                           <View style={[styles.sliderHandleInner, { backgroundColor: '#38BDF8' }]} />
                         </View>
@@ -204,10 +254,7 @@ const styles = StyleSheet.create({
   nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 },
   nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' },
-  nodeScoreBlock: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  trendArrow: { fontSize: 16, fontWeight: '300' },
   goalNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  deltaBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 },
   coordinatesLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' },

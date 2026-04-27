@@ -47,6 +47,18 @@ export default function App() {
   // — AI briefing state (null = not fetched, 'loading' = in-flight, object = ready) —
   type AiBriefing = { briefingLines: { prefix: string; text: string }[]; suggest1: CopilotSuggestion; suggest2: CopilotSuggestion };
   const [aiBriefing, setAiBriefing] = useState<null | 'loading' | AiBriefing>(null);
+
+  // — last cycle tracking — snapshot taken when user acts on a suggestion —
+  type LastCycleAction = {
+    action: string;
+    nodeId: string;
+    goalId?: string;
+    goalName: string;
+    nodeName: string;
+    valueBefore: number;
+    nodeAvgBefore: number;
+  };
+  const [lastCycleAction, setLastCycleAction] = useState<LastCycleAction | null>(null);
   const [copilotOrbitAngle, setCopilotOrbitAngle] = useState(0);
   const copilotOrbitAnim = useRef(new Animated.Value(0)).current;
   const copilotSunburstAnim = useRef(new Animated.Value(0)).current;
@@ -260,6 +272,20 @@ export default function App() {
 
   // — suggestion handler —
   const handleSuggestion = useCallback((s: CopilotSuggestion) => {
+    // Snapshot before-state for Last Cycle recap
+    const node = nodes.find(n => n.id === s.nodeId);
+    const goal = node?.goals.find(g => g.id === s.goalId);
+    if (node) {
+      setLastCycleAction({
+        action: s.action,
+        nodeId: s.nodeId || '',
+        goalId: s.goalId,
+        goalName: goal?.name || node.goals[0]?.name || '',
+        nodeName: node.name,
+        valueBefore: goal?.value ?? node.goals[0]?.value ?? 0,
+        nodeAvgBefore: parseFloat(getNodeAvg(node)),
+      });
+    }
     if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
     else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
     else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
@@ -269,7 +295,7 @@ export default function App() {
         : { nodeId: '', goalId: '' };
       if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskOpen(true); }
     }
-  }, [nodes]);
+  }, [nodes, getNodeAvg]);
 
   // — auth handlers —
   const handleAuthSubmit = useCallback(async () => {
@@ -778,7 +804,40 @@ export default function App() {
                       <Text style={styles.copilotCloseX}>✕</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.copilotHeading, { marginTop: 0 }]}>
+                  {/* Last Cycle recap */}
+                  {lastCycleAction && (() => {
+                    const lcNode = nodes.find(n => n.id === lastCycleAction.nodeId);
+                    const lcGoal = lcNode?.goals.find(g => g.id === lastCycleAction.goalId);
+                    const nodeAvgNow = lcNode ? parseFloat(getNodeAvg(lcNode)) : lastCycleAction.nodeAvgBefore;
+                    const delta = nodeAvgNow - lastCycleAction.nodeAvgBefore;
+                    const improving = delta > 0.05;
+                    const declining = delta < -0.05;
+                    const deltaColor = improving ? '#4ade80' : declining ? '#fb7185' : THEME.textDim;
+                    const actionLabel: Record<string, string> = {
+                      calibrate: 'CALIBRATED', logEvidence: 'EVIDENCE LOGGED',
+                      prioritize: 'REVIEWED', deployTask: 'TASK DEPLOYED',
+                    };
+                    const valueChanged = lcGoal && lastCycleAction.action === 'calibrate' && lcGoal.value !== lastCycleAction.valueBefore;
+                    return (
+                      <>
+                        <Text style={[styles.copilotHeading, { marginTop: 0 }]}>LAST CYCLE</Text>
+                        <View style={styles.copilotLastCycleCard}>
+                          <Text style={styles.copilotLastCycleAction}>
+                            {actionLabel[lastCycleAction.action] || 'ACTIONED'} · {lastCycleAction.goalName.toUpperCase()} ({lastCycleAction.nodeName.toUpperCase()})
+                          </Text>
+                          {valueChanged && lcGoal && (
+                            <Text style={styles.copilotLastCycleDetail}>
+                              {lastCycleAction.valueBefore} → {lcGoal.value}
+                            </Text>
+                          )}
+                          <Text style={[styles.copilotLastCycleDelta, { color: deltaColor }]}>
+                            NODE AVG {delta >= 0 ? '+' : ''}{delta.toFixed(1)} · {improving ? 'MOMENTUM IMPROVING' : declining ? 'NEEDS ATTENTION' : 'STABLE'}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  })()}
+                  <Text style={[styles.copilotHeading, { marginTop: lastCycleAction ? 12 : 0 }]}>
                     {isLoading ? 'BRIEFING  ···' : 'BRIEFING'}
                   </Text>
                   {displayContent.briefingLines.map((line, lineIdx) => {
@@ -877,6 +936,10 @@ const styles = StyleSheet.create({
   copilotBriefingNum: { fontWeight: '700', color: '#FFFFFF' },
   copilotSuggestionBtn: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, alignItems: 'center' },
   copilotSuggestionBtnText: { color: THEME.border, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  copilotLastCycleCard: { backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 12, borderLeftWidth: 2, borderLeftColor: THEME.accent, marginBottom: 4 },
+  copilotLastCycleAction: { color: THEME.border, fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
+  copilotLastCycleDetail: { color: 'white', fontSize: 18, fontWeight: '200', letterSpacing: 3, marginBottom: 4 },
+  copilotLastCycleDelta: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
 
   // System access gate
   systemAccessOverlay: { flex: 1, backgroundColor: 'rgba(21,34,56,0.96)', justifyContent: 'center', alignItems: 'center', padding: 24 },

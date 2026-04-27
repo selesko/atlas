@@ -1,9 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } from 'react-native';
 import { OrbitalValueBadge } from '../components/OrbitalValueBadge';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { Node, Goal } from '../types';
+import { fetchNodeIntent } from '../services/aiService';
 
 const { width } = Dimensions.get('window');
 
@@ -67,8 +68,27 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
   onOpenEditNode,
   onOpenSystemGate,
 }) => {
-  const { nodes, updateValue, addCoordinate, hasAccess, getNodeAvg } = useAppStore();
+  const { nodes, updateValue, addCoordinate, hasAccess, getNodeAvg, session, persona } = useAppStore();
   const trackWidths = useRef<Record<string, number>>({});
+
+  // ── AI node intent — cached per node id, fetched on expand ─────────────────
+  const [nodeIntents, setNodeIntents] = useState<Record<string, string | 'loading'>>({});
+
+  useEffect(() => {
+    if (!selectedNodeId || !session) return;
+    // Already fetched or in flight
+    if (nodeIntents[selectedNodeId]) return;
+    const node = nodes.find(n => n.id === selectedNodeId);
+    if (!node) return;
+
+    setNodeIntents(prev => ({ ...prev, [selectedNodeId]: 'loading' }));
+    fetchNodeIntent(node, persona).then(guidance => {
+      setNodeIntents(prev => ({
+        ...prev,
+        [selectedNodeId]: guidance ?? '',
+      }));
+    });
+  }, [selectedNodeId, session]);
 
   return (
     <View>
@@ -90,13 +110,36 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   )}
                 </View>
               </View>
-              <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
+              <OrbitalValueBadge value={parseFloat(getNodeAvg(node))} color={node.color} size={52} />
             </View>
           </TouchableOpacity>
 
           {selectedNodeId === node.id && (
             <View style={styles.nodeExpanded}>
               <View style={styles.divider} />
+
+              {/* ── AI guidance ───────────────────────────────────────────── */}
+              {session && (() => {
+                const intent = nodeIntents[node.id];
+                if (intent === 'loading') {
+                  return (
+                    <View style={styles.intentRow}>
+                      <Text style={[styles.intentPrefix, { color: node.color }]}>✦</Text>
+                      <Text style={styles.intentLoading}>calibrating…</Text>
+                    </View>
+                  );
+                }
+                if (intent) {
+                  return (
+                    <View style={styles.intentRow}>
+                      <Text style={[styles.intentPrefix, { color: node.color }]}>✦</Text>
+                      <Text style={styles.intentText}>{intent}</Text>
+                    </View>
+                  );
+                }
+                return null;
+              })()}
+
               {node.description ? (
                 <>
                   <Text style={styles.coordinatesLabel}>DESIRED INTENT</Text>
@@ -119,9 +162,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   onPanResponderMove: applySlider,
                 });
                 const hasEvidence = !!goal.evidence?.trim();
-                const momentum = getMomentum(goal);
-                const glow = getMomentumGlow(momentum);
-                const sliderColor = getMomentumSliderColor(node.color, momentum);
+                // Intensity: white at low values → node color at high values
+                const intensity = goal.value / 10;
+                const valueColor = lerpColor('#ffffff', node.color, intensity);
+                const borderOpacity = Math.round(intensity * 0.4 * 255).toString(16).padStart(2, '0');
                 return (
                   <TouchableOpacity
                     key={goal.id}
@@ -129,23 +173,18 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                     onPress={() => onOpenCoordEdit(node.id, goal.id)}
                     style={[
                       styles.nodeOverlayCoord,
-                      glow.opacity > 0 && {
-                        shadowColor: glow.color,
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: glow.opacity,
-                        shadowRadius: 10,
+                      {
                         borderWidth: 1,
-                        borderColor: glow.color + '28',
+                        borderColor: valueColor + borderOpacity,
                       },
                     ]}
                   >
-                    {/* Title row: name + evidence dot + value */}
+                    {/* Title row: name + evidence dot */}
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
                         <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
                         <Text style={styles.goalName}>{goal.name}</Text>
                       </View>
-                      <OrbitalValueBadge value={goal.value} color={sliderColor} size={40} />
                     </View>
 
                     {/* Slider */}
@@ -155,10 +194,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                         onLayout={(e) => { trackWidths.current[key] = e.nativeEvent.layout.width; }}
                         {...pan.panHandlers}
                       >
-                        <View style={[styles.sliderLine, { backgroundColor: sliderColor, opacity: 0.3 }]} />
-                        <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: sliderColor }]} />
+                        <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.15 }]} />
+                        <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: valueColor }]} />
                         <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
-                          <View style={[styles.sliderHandleInner, { backgroundColor: sliderColor }]} />
+                          <View style={[styles.sliderHandleInner, { backgroundColor: valueColor }]} />
                         </View>
                       </View>
                     </View>
@@ -227,4 +266,8 @@ const styles = StyleSheet.create({
   coordValue: { fontSize: 20, fontWeight: '200', opacity: 0.9 },
   addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
   addCoordinateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  intentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 20 },
+  intentPrefix: { fontSize: 12, fontWeight: '700', marginTop: 1, flexShrink: 0 },
+  intentText: { flex: 1, color: 'rgba(255,255,255,0.65)', fontSize: 13, fontWeight: '400', lineHeight: 19, fontStyle: 'italic' },
+  intentLoading: { flex: 1, color: 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: '600', letterSpacing: 2, fontStyle: 'italic' },
 });

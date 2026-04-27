@@ -30,12 +30,14 @@ export interface Node {
 
 export type CognitiveModel = 'Architect' | 'Strategist' | 'Builder' | 'Analyst';
 export type PeakPeriod = 'MORNING' | 'EVENING';
+export type Persona = 'Engineer' | 'Seeker' | 'Spiritual';
 export type AtlasGraphView = 'radar' | 'trajectory' | 'constellation';
 export type TaskFilter = 'ALL' | 'MIND' | 'BODY' | 'HOME' | 'FOCUS';
+export type MotivatorChoice = 'left' | 'right';
+export type MotivatorChoices = Record<string, MotivatorChoice>;
 
 export interface Profile {
   cognitiveModel: CognitiveModel;
-  peakPeriod: PeakPeriod;
-  motivators: string[];
+  motivatorChoices: MotivatorChoices;
   identityNotes: string;
 }

@@ -6,8 +6,8 @@ import {
 import Svg, { Circle, Line } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
-import { THEME, MODEL_DESCRIPTIONS, MOTIVATOR_OPTIONS } from '../constants/theme';
-import { CognitiveModel, PeakPeriod } from '../types';
+import { THEME, MODEL_DESCRIPTIONS, MOTIVATOR_TENSIONS } from '../constants/theme';
+import { CognitiveModel, MotivatorChoices } from '../types';
 
 const { width, height } = Dimensions.get('window');
 
@@ -136,8 +136,6 @@ interface Props {
     nodeUpdates: { id: string; name: string; description: string }[];
     scores: { nodeId: string; goalId: string; value: number }[];
     cognitiveModel: CognitiveModel;
-    peakPeriod: PeakPeriod;
-    motivators: string[];
   }) => void;
   initialNodes: { id: string; name: string; description: string; color: string; goals: { id: string; name: string; value: number }[] }[];
 }
@@ -156,8 +154,11 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
 
   // Step 3 — profile
   const [cogModel, setCogModel] = useState<CognitiveModel>('Architect');
-  const [peakPeriod, setPeakPeriod] = useState<PeakPeriod>('MORNING');
-  const [motivators, setMotivators] = useState<string[]>([]);
+  const [motivatorChoices, setMotivatorChoices] = useState<MotivatorChoices>({});
+
+  const handleTensionSelect = (id: string, side: 'left' | 'right') => {
+    setMotivatorChoices(prev => ({ ...prev, [id]: side }));
+  };
 
   // Step 4 — calibration
   const [scores, setScores] = useState<Record<string, number>>(
@@ -192,8 +193,6 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
         n.goals.map(g => ({ nodeId: n.id, goalId: g.id, value: scores[g.id] ?? g.value }))
       ),
       cognitiveModel: cogModel,
-      peakPeriod,
-      motivators,
     });
   };
 
@@ -214,9 +213,6 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
   };
 
   const toggleMotivator = (m: string) => {
-    setMotivators(prev =>
-      prev.includes(m) ? prev.filter(x => x !== m) : prev.length < 3 ? [...prev, m] : prev
-    );
     Haptics.selectionAsync();
   };
 
@@ -356,39 +352,32 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
               ))}
             </View>
 
-            {/* Peak Period */}
-            <Text style={styles.sectionLabel}>PEAK PERIOD</Text>
-            <View style={styles.peakRow}>
-              {(['MORNING', 'EVENING'] as PeakPeriod[]).map(p => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.peakBtn, peakPeriod === p && styles.peakBtnActive]}
-                  onPress={() => { setPeakPeriod(p); Haptics.selectionAsync(); }}
-                >
-                  <Text style={[styles.peakText, peakPeriod === p && styles.peakTextActive]}>
-                    {p === 'MORNING' ? '☀️  MORNING' : '🌙  EVENING'}
-                  </Text>
-                  <Text style={styles.peakSub}>{p === 'MORNING' ? '06:00 – 12:00' : '18:00 – 00:00'}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
             {/* Motivators */}
-            <Text style={styles.sectionLabel}>MOTIVATORS <Text style={styles.sectionSub}>(pick up to 3)</Text></Text>
-            <View style={styles.motivatorGrid}>
-              {MOTIVATOR_OPTIONS.map(m => {
-                const selected = motivators.includes(m);
-                return (
-                  <TouchableOpacity
-                    key={m}
-                    style={[styles.motivatorChip, selected && styles.motivatorChipActive]}
-                    onPress={() => toggleMotivator(m)}
-                  >
-                    <Text style={[styles.motivatorText, selected && styles.motivatorTextActive]}>{m}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <Text style={styles.sectionLabel}>MOTIVATORS</Text>
+            {MOTIVATOR_TENSIONS.map(tension => {
+              const choice = motivatorChoices[tension.id];
+              return (
+                <View key={tension.id} style={styles.tensionRow}>
+                  <View style={styles.tensionPill}>
+                    <TouchableOpacity
+                      style={[styles.tensionSide, choice === 'left' && styles.tensionSideActive]}
+                      onPress={() => { handleTensionSelect(tension.id, 'left'); Haptics.selectionAsync(); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.tensionSideText, choice === 'left' && styles.tensionSideTextActive]}>{tension.left}</Text>
+                    </TouchableOpacity>
+                    <View style={styles.tensionDivider} />
+                    <TouchableOpacity
+                      style={[styles.tensionSide, choice === 'right' && styles.tensionSideActive]}
+                      onPress={() => { handleTensionSelect(tension.id, 'right'); Haptics.selectionAsync(); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.tensionSideText, choice === 'right' && styles.tensionSideTextActive]}>{tension.right}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
 
             <View style={styles.bottomBar}>
               <ProgressDots step={step} />
@@ -679,66 +668,13 @@ const styles = StyleSheet.create({
     color: '#303050',
     lineHeight: 16,
   },
-  peakRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 24,
-  },
-  peakBtn: {
-    flex: 1,
-    backgroundColor: '#0c0c18',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1a1a2e',
-    padding: 14,
-    alignItems: 'center',
-  },
-  peakBtnActive: {
-    borderColor: '#7C6AF7',
-    backgroundColor: '#14122e',
-  },
-  peakText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#404068',
-    letterSpacing: 1,
-  },
-  peakTextActive: {
-    color: '#fff',
-  },
-  peakSub: {
-    fontSize: 10,
-    color: '#303050',
-    marginTop: 4,
-    letterSpacing: 1,
-  },
-  motivatorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 28,
-  },
-  motivatorChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#1a1a2e',
-    backgroundColor: '#0c0c18',
-  },
-  motivatorChipActive: {
-    borderColor: '#7C6AF7',
-    backgroundColor: '#14122e',
-  },
-  motivatorText: {
-    fontSize: 11,
-    color: '#404068',
-    letterSpacing: 1.5,
-    fontWeight: '600',
-  },
-  motivatorTextActive: {
-    color: '#7C6AF7',
-  },
+  tensionRow: { marginBottom: 10 },
+  tensionPill: { flexDirection: 'row', borderRadius: 24, borderWidth: 1, borderColor: '#1a1a2e', overflow: 'hidden', backgroundColor: '#0c0c18' },
+  tensionSide: { flex: 1, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
+  tensionSideActive: { backgroundColor: 'rgba(124,106,247,0.18)' },
+  tensionSideText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: '#404068' },
+  tensionSideTextActive: { color: '#7C6AF7' },
+  tensionDivider: { width: 1, backgroundColor: '#1a1a2e' },
 
   // ── Calibration ──
   calibrateNode: {

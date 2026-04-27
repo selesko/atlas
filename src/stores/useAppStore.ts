@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { Node, Goal, Task, CognitiveModel, PeakPeriod } from '../types';
+import { Node, Goal, Task, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
 import { INITIAL_DATA } from '../constants/data';
 import { todayISO } from '../constants/data';
 import {
@@ -12,6 +12,7 @@ import {
   upsertProfile,
   deleteTask as syncDeleteTask,
 } from '../services/sync';
+import { useSnapshotStore, RadarSnapshot } from './useSnapshotStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,9 +20,9 @@ interface AppState {
   // Domain state
   nodes: Node[];
   cognitiveModel: CognitiveModel;
-  peakPeriod: PeakPeriod;
-  motivators: string[];
+  motivatorChoices: MotivatorChoices;
   identityNotes: string;
+  persona: Persona;
 
   // Auth state
   // hasAccess is true when: real Supabase session exists OR dev override is on
@@ -57,8 +58,8 @@ interface AppState {
 
   // Profile actions
   setCognitiveModel: (model: CognitiveModel) => void;
-  setPeakPeriod: (period: PeakPeriod) => void;
-  setMotivators: (motivators: string[]) => void;
+  setPersona: (persona: Persona) => void;
+  setMotivatorChoices: (choices: MotivatorChoices) => void;
   setIdentityNotes: (notes: string) => void;
   /** @deprecated use setDevOverride — kept for backwards compat during transition */
   setHasAccess: (value: boolean) => void;
@@ -72,9 +73,9 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   nodes: INITIAL_DATA,
   cognitiveModel: 'Architect',
-  peakPeriod: 'MORNING',
-  motivators: [],
+  motivatorChoices: {},
   identityNotes: '',
+  persona: 'Seeker',
   session: null,
   devOverride: false,
   hasAccess: false,
@@ -90,7 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ─── Persistence ────────────────────────────────────────────────────────────
 
   loadUserData: async () => {
-    const { session, nodes: localNodes, cognitiveModel, peakPeriod, motivators, identityNotes } = get();
+    const { session, nodes: localNodes, cognitiveModel, motivatorChoices, identityNotes } = get();
     const userId = session?.user.id;
     if (!userId) return;
 
@@ -98,7 +99,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (remoteNodes.length === 0 && !profile) {
       // New user — push local state up to Supabase
-      await pushLocalData(userId, localNodes, { cognitiveModel, peakPeriod, motivators, identityNotes });
+      await pushLocalData(userId, localNodes, { cognitiveModel, motivatorChoices, identityNotes });
       return;
     }
 
@@ -107,8 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       nodes: remoteNodes.length > 0 ? remoteNodes : localNodes,
       ...(profile ? {
         cognitiveModel: profile.cognitiveModel,
-        peakPeriod: profile.peakPeriod,
-        motivators: profile.motivators,
+        motivatorChoices: profile.motivatorChoices,
         identityNotes: profile.identityNotes,
       } : {}),
     });
@@ -123,6 +123,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateValue: (nodeId, goalId, val) => {
     const today = todayISO();
+
+    // Capture node avg BEFORE update for threshold detection
+    const prevNode = get().nodes.find(n => n.id === nodeId);
+    const prevAvg = prevNode
+      ? prevNode.goals.reduce((acc, g) => acc + g.value, 0) / (prevNode.goals.length || 1)
+      : 0;
+
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== nodeId) return n;
@@ -140,6 +147,29 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       }),
     }));
+
+    // Threshold detection — snapshot when node crosses above 7.0
+    const updatedNode = get().nodes.find(n => n.id === nodeId);
+    if (updatedNode) {
+      const newAvg = updatedNode.goals.reduce((acc, g) => acc + g.value, 0) / (updatedNode.goals.length || 1);
+      if (prevAvg < 7.0 && newAvg >= 7.0) {
+        const snapshot: RadarSnapshot = {
+          id: `snap_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          triggerNodeId: nodeId,
+          triggerNodeName: updatedNode.name,
+          triggerNodeAvg: parseFloat(newAvg.toFixed(1)),
+          nodeScores: get().nodes.map(n => ({
+            nodeId: n.id,
+            nodeName: n.name,
+            color: n.color,
+            avg: parseFloat((n.goals.reduce((acc, g) => acc + g.value, 0) / (n.goals.length || 1)).toFixed(1)),
+          })),
+        };
+        useSnapshotStore.getState().addSnapshot(snapshot);
+      }
+    }
+
     // Fire-and-forget sync
     const userId = get().session?.user.id;
     if (userId) {
@@ -374,35 +404,29 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ─── Profile actions ────────────────────────────────────────────────────────
 
+  setPersona: (persona) => set({ persona }),
+
   setCognitiveModel: (model) => {
     set({ cognitiveModel: model });
-    const { session, peakPeriod, motivators, identityNotes } = get();
+    const { session, motivatorChoices, identityNotes } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel: model, peakPeriod, motivators, identityNotes });
+      upsertProfile(session.user.id, { cognitiveModel: model, motivatorChoices, identityNotes });
     }
   },
 
-  setPeakPeriod: (period) => {
-    set({ peakPeriod: period });
-    const { session, cognitiveModel, motivators, identityNotes } = get();
+  setMotivatorChoices: (choices) => {
+    set({ motivatorChoices: choices });
+    const { session, cognitiveModel, identityNotes } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, peakPeriod: period, motivators, identityNotes });
-    }
-  },
-
-  setMotivators: (motivators) => {
-    set({ motivators });
-    const { session, cognitiveModel, peakPeriod, identityNotes } = get();
-    if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, peakPeriod, motivators, identityNotes });
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices: choices, identityNotes });
     }
   },
 
   setIdentityNotes: (notes) => {
     set({ identityNotes: notes });
-    const { session, cognitiveModel, peakPeriod, motivators } = get();
+    const { session, cognitiveModel, motivatorChoices } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, peakPeriod, motivators, identityNotes: notes });
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices, identityNotes: notes });
     }
   },
 

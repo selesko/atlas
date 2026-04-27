@@ -10,6 +10,7 @@ import Svg, {
 import * as Haptics from 'expo-haptics';
 import { useAppStore } from '../stores/useAppStore';
 import { FadingBorder } from '../components/FadingBorder';
+import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME } from '../constants/theme';
 import { AtlasGraphView, Node } from '../types';
 
@@ -52,6 +53,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
+  const [radarModalOpen, setRadarModalOpen] = useState(false);
   const [stars, setStars] = useState<Array<{ cx: number; cy: number; r: number; op: number }>>([]);
   const [trajectoryDragX, setTrajectoryDragX] = useState<number | null>(null);
   const [radarPulseScale, setRadarPulseScale] = useState(1);
@@ -183,6 +185,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   const handleRadarTouch = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRadarModalOpen(true);
   }, []);
 
   // Derived values
@@ -526,6 +529,20 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
           ))}
         </View>
       </FadingBorder>
+
+      {/* Live radar detail modal */}
+      <SnapshotDetailModal
+        visible={radarModalOpen}
+        onClose={() => setRadarModalOpen(false)}
+        nodes={nodes.map(n => ({
+          nodeId: n.id,
+          nodeName: n.name,
+          color: n.color,
+          avg: parseFloat(getNodeAvg(n)),
+        }))}
+        label="LIVE"
+        triggerNode={null}
+      />
     </>
   );
 };

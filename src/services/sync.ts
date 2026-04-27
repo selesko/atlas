@@ -6,7 +6,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
-import { Node, Goal, Task, CognitiveModel, PeakPeriod } from '../types';
+import { Node, Goal, Task, CognitiveModel, MotivatorChoices } from '../types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -19,8 +19,7 @@ function swallow(label: string, err: unknown) {
 
 export interface ProfilePayload {
   cognitiveModel: CognitiveModel;
-  peakPeriod: PeakPeriod;
-  motivators: string[];
+  motivatorChoices: MotivatorChoices;
   identityNotes: string;
 }
 
@@ -32,8 +31,7 @@ export async function upsertProfile(
     {
       user_id: userId,
       cognitive_model: payload.cognitiveModel,
-      peak_period: payload.peakPeriod,
-      motivators: payload.motivators,
+      motivators: payload.motivatorChoices,
       identity_notes: payload.identityNotes,
       updated_at: new Date().toISOString(),
     },
@@ -227,8 +225,7 @@ export async function fetchUserData(userId: string): Promise<UserData> {
   const profile: ProfilePayload | null = rawProfile
     ? {
         cognitiveModel: rawProfile.cognitive_model as CognitiveModel,
-        peakPeriod: rawProfile.peak_period as PeakPeriod,
-        motivators: rawProfile.motivators ?? [],
+        motivatorChoices: (rawProfile.motivators as MotivatorChoices) ?? {},
         identityNotes: rawProfile.identity_notes ?? '',
       }
     : null;

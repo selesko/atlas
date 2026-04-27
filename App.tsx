@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './lib/supabase';
 import { useAppStore } from './src/stores/useAppStore';
 import { FadingBorder } from './src/components/FadingBorder';
-import { THEME, NODE_COLORS, INFO_TEXTS, HEADER_CONNECTED, HEADER_FALLBACKS, pickHeaderFallback } from './src/constants/theme';
+import { THEME, NODE_COLORS, INFO_TEXTS, PERSONA_SUBTITLES } from './src/constants/theme';
 import { AtlasScreen } from './src/screens/AtlasScreen';
 import { NodesScreen } from './src/screens/NodesScreen';
 import { TasksScreen } from './src/screens/TasksScreen';
@@ -73,9 +73,6 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // — header —
-  const [headerSubtitle, setHeaderSubtitle] = useState(pickHeaderFallback);
-
   // — slider track widths for coordinate edit modal —
   const trackWidths = useRef<Record<string, number>>({});
 
@@ -86,12 +83,15 @@ export default function App() {
   // — store —
   const {
     nodes, hasAccess, session,
-    cognitiveModel, peakPeriod, motivators,
+    cognitiveModel, persona,
     updateValue, updateNode, addNode: storeAddNode, saveTaskEdit,
     toggleTask, getNodeAvg,
     setSession, loadUserData,
-    setCognitiveModel, setPeakPeriod, setMotivators,
+    setCognitiveModel,
   } = useAppStore();
+
+  // — header — derived from persona + active tab
+  const headerSubtitle = PERSONA_SUBTITLES[persona]?.[activeTab] ?? '';
 
   // — sync edit node form when editingNodeId changes —
   useEffect(() => {
@@ -116,8 +116,6 @@ export default function App() {
     nodeUpdates: { id: string; name: string; description: string }[];
     scores: { nodeId: string; goalId: string; value: number }[];
     cognitiveModel: import('./src/types').CognitiveModel;
-    peakPeriod: import('./src/types').PeakPeriod;
-    motivators: string[];
   }) => {
     // Apply node renames
     data.nodeUpdates.forEach(u => updateNode(u.id, { name: u.name, description: u.description }));
@@ -125,32 +123,26 @@ export default function App() {
     data.scores.forEach(s => updateValue(s.nodeId, s.goalId, s.value));
     // Apply profile
     setCognitiveModel(data.cognitiveModel);
-    setPeakPeriod(data.peakPeriod);
-    setMotivators(data.motivators);
     // Mark onboarding done
     await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     setShowOnboarding(false);
-  }, [updateNode, updateValue, setCognitiveModel, setPeakPeriod, setMotivators]);
+  }, [updateNode, updateValue, setCognitiveModel]);
 
   // — supabase auth listener + header subtitle —
   useEffect(() => {
     let mounted = true;
 
-    // Bootstrap: hydrate session from storage and set header
+    // Bootstrap: hydrate session from storage
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setSession(data.session);
-      setHeaderSubtitle(data.session ? HEADER_CONNECTED : pickHeaderFallback());
       if (data.session) loadUserData();
-    }).catch(() => {
-      if (mounted) setHeaderSubtitle(pickHeaderFallback());
-    });
+    }).catch(() => {});
 
     // Live auth state changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
-      setHeaderSubtitle(newSession ? HEADER_CONNECTED : pickHeaderFallback());
       if (newSession) loadUserData();
       if (!newSession) setAuthOpen(false);
     });
@@ -188,7 +180,7 @@ export default function App() {
     if (!copilotOpen || !session) { setAiBriefing(null); return; }
     setAiBriefing('loading');
     supabase.functions.invoke('calibra-ai', {
-      body: { nodes, cognitiveModel, peakPeriod, motivators },
+      body: { nodes, cognitiveModel },
     }).then(({ data, error }) => {
       if (error || !data?.briefingLines) { setAiBriefing(null); return; }
       setAiBriefing(data as AiBriefing);
@@ -217,7 +209,7 @@ export default function App() {
         if (needEvidence.length) briefingLines.push({ prefix: '> EVIDENCE REQUIRED:', text: `${needEvidence.length} COORDINATE(S) LACK EVIDENCE — ${needEvidence.slice(0, 3).map(e => `${e.g.name.toUpperCase()} (${e.n.name.toUpperCase()})`).join('; ')}.` });
         if (briefingLines.length === 0) briefingLines = [{ prefix: '> STATUS:', text: 'ALL COORDINATES CALIBRATED. ALL EVIDENCE LOGGED.' }];
       } else if (activeTab === 'Profile') {
-        briefingLines = [{ prefix: '> STATUS:', text: `${cognitiveModel.toUpperCase()} ARCHETYPE. PEAK PERIOD ${peakPeriod}. ${motivators.length ? `MOTIVATORS: ${motivators.slice(0, 3).join(', ')}.` : 'SET MOTIVATORS FOR ALIGNMENT.'}` }];
+        briefingLines = [{ prefix: '> STATUS:', text: `${cognitiveModel.toUpperCase()} ARCHETYPE. PROFILE LOADED.` }];
       } else {
         if (highest && lowest && delta !== '0') {
           briefingLines = [
@@ -252,7 +244,7 @@ export default function App() {
       suggest2 = { label: `Your ${(needsNode?.name || 'mind').toUpperCase()} node could use a new task; deploy one to build momentum.`, action: 'deployTask', nodeId: needsNode?.id, goalId: needsNode?.goals[0]?.id };
     }
     return { briefingLines, suggest1, suggest2 };
-  }, [activeTab, nodes, cognitiveModel, peakPeriod, motivators]);
+  }, [activeTab, nodes, cognitiveModel]);
 
   // — briefing highlight —
   const briefingHighlight = useMemo(() => {

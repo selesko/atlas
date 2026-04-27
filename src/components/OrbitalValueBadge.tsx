@@ -20,6 +20,9 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
   const sweep    = fraction * 360;
   const complete = sweep >= 359.9;
 
+  // Full orbit = node color; anything less = white
+  const activeColor = complete ? color : 'rgba(255,255,255,0.85)';
+
   // Arc end point (start is always top = (cx, cy - R))
   const endRad = ((-90 + sweep) * Math.PI) / 180;
   const endX   = cx + R * Math.cos(endRad);
@@ -46,7 +49,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
           <Circle
             cx={cx} cy={cy} r={R}
             fill="none"
-            stroke={color}
+            stroke={activeColor}
             strokeWidth={2}
             opacity={0.85}
           />
@@ -54,7 +57,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
           <Path
             d={`M ${cx} ${(cy - R).toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${endX.toFixed(2)} ${endY.toFixed(2)}`}
             fill="none"
-            stroke={color}
+            stroke={activeColor}
             strokeWidth={2}
             strokeLinecap="round"
             opacity={0.85}
@@ -63,7 +66,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
 
         {/* Planet dot at arc tip (not shown when complete — orbit ring covers it) */}
         {!complete && value > 0 && (
-          <Circle cx={endX} cy={endY} r={planetR} fill={color} />
+          <Circle cx={endX} cy={endY} r={planetR} fill={activeColor} />
         )}
 
       </Svg>
@@ -71,7 +74,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
       {/* Value number centered */}
       <Text
         style={{
-          color,
+          color: activeColor,
           fontSize: size * 0.34,
           fontWeight: '200',
           includeFontPadding: false,

@@ -19,15 +19,26 @@ export const NODE_COLORS = [
 
 export const DEFAULT_NODE_IDS = ['mind', 'body', 'home'];
 
-export const HEADER_CONNECTED = 'SYSTEM ALIGNMENT // V1.0';
-export const HEADER_FALLBACKS = [
-  'SYSTEMS NOMINAL', 'ALL GREEN', 'STANDING BY', 'LOCAL MODE',
-  'OFFLINE — SYSTEMS STABLE', 'ALIGNMENT CHECK PENDING', 'SYSTEMS STABLE // LOCAL',
-];
-
-export function pickHeaderFallback(): string {
-  return HEADER_FALLBACKS[Math.floor(Math.random() * HEADER_FALLBACKS.length)];
-}
+export const PERSONA_SUBTITLES: Record<string, Record<string, string>> = {
+  Engineer: {
+    Atlas:   'SYSTEM OVERVIEW // BALANCE CHECK',
+    Nodes:   'NODE CALIBRATION // ACTIVE',
+    Tasks:   'TASK DEPLOYMENT // VELOCITY',
+    Profile: 'OPERATOR CONFIG // LOADED',
+  },
+  Seeker: {
+    Atlas:   'YOUR CONSTELLATION AT A GLANCE',
+    Nodes:   'THE PILLARS OF YOUR PATH',
+    Tasks:   'ACTIONS THAT MOVE YOU FORWARD',
+    Profile: 'YOUR ARCHETYPE & DIRECTION',
+  },
+  Spiritual: {
+    Atlas:   'THE SHAPE OF YOUR BECOMING',
+    Nodes:   'THE ROOTS BENEATH THE BRANCHES',
+    Tasks:   'SEEDS PLANTED IN INTENTION',
+    Profile: 'THE FACE YOU OFFER THE WORLD',
+  },
+};
 
 export const INFO_TEXTS: Record<string, string> = {
   Atlas: 'The Atlas is your primary visualization of the balance between Mind, Body, and Home. This radar chart represents the current state of your system based on the coordinates you have manually set. A symmetrical shape indicates balance, while a pull toward one node highlights where your current focus should be concentrated.',
@@ -36,9 +47,36 @@ export const INFO_TEXTS: Record<string, string> = {
   Profile: 'The Profile page defines your current Archetype.\n\nSelecting an Archetype (Architect, Nomad, or Guardian) updates the interface overlay and the specific "Directives" shown throughout the app.\n\nThis allows you to match the system\'s feedback to your current environment or phase of life.',
 };
 
-export const MOTIVATOR_OPTIONS = [
-  'DISCIPLINE', 'CREATIVITY', 'CONNECTION', 'AUTONOMY',
-  'MASTERY', 'VITALITY', 'ORDER', 'GROWTH', 'LEGACY',
+export const PERSONA_DATA = {
+  Engineer: {
+    lines: [
+      'Precision over poetry. Your system is a machine.',
+      'Every coordinate is a data point. Every action, a variable.',
+      'You optimize what others overlook.',
+    ],
+  },
+  Seeker: {
+    lines: [
+      'Between the map and the meaning.',
+      'You move with intention, guided by what matters.',
+      'The path is yours to define.',
+    ],
+  },
+  Spiritual: {
+    lines: [
+      'The stars don\'t explain themselves. Neither do you.',
+      'You navigate by feeling, by rhythm, by season.',
+      'Your atlas is a living thing.',
+    ],
+  },
+} as const;
+
+export const MOTIVATOR_TENSIONS = [
+  { id: 'operation', left: 'DISCIPLINE',   right: 'EXPLORATION' },
+  { id: 'energy',    left: 'DEPTH',        right: 'BREADTH'     },
+  { id: 'rhythm',    left: 'CONSISTENCY',  right: 'INTENSITY'   },
+  { id: 'recharge',  left: 'SOLITUDE',     right: 'CONNECTION'  },
+  { id: 'approach',  left: 'SYSTEM',       right: 'INTUITION'   },
 ] as const;
 
 export const MODEL_DESCRIPTIONS: Record<string, string> = {

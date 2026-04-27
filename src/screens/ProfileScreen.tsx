@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Modal, ScrollView, Dimensions } from 'react-native';
+import Svg, { Circle, Path, Line, Polyline, Ellipse } from 'react-native-svg';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '../stores/useAppStore';
-import { THEME, MOTIVATOR_OPTIONS, MODEL_DESCRIPTIONS } from '../constants/theme';
+import { useSnapshotStore, RadarSnapshot } from '../stores/useSnapshotStore';
+import { MiniRadar } from '../components/MiniRadar';
+import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
+import { THEME, MOTIVATOR_TENSIONS, PERSONA_DATA } from '../constants/theme';
+import { Persona, MotivatorChoices } from '../types';
+
+const PERSONAS: Persona[] = ['Engineer', 'Seeker', 'Spiritual'];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = SCREEN_WIDTH - 80;
 
 interface ProfileScreenProps {
   session: Session | null;
@@ -15,13 +23,26 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn, onSignUp, onSignOut }) => {
   const {
     cognitiveModel, setCognitiveModel,
-    peakPeriod, setPeakPeriod,
-    motivators, setMotivators,
+    persona, setPersona,
+    motivatorChoices, setMotivatorChoices,
     identityNotes, setIdentityNotes,
     devOverride, setDevOverride,
   } = useAppStore();
 
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const { snapshots, loaded, loadSnapshots } = useSnapshotStore();
+
+  useEffect(() => {
+    if (!loaded) loadSnapshots();
+  }, []);
+
+  const handleTensionSelect = (id: string, side: 'left' | 'right') => {
+    setMotivatorChoices({ ...motivatorChoices, [id]: side });
+  };
+
+  const [personaModalOpen, setPersonaModalOpen] = useState(false);
+  const [swipeIndex, setSwipeIndex] = useState(PERSONAS.indexOf(persona));
+  const scrollRef = useRef<ScrollView>(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<RadarSnapshot | null>(null);
 
   return (
     <View>
@@ -60,112 +81,207 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         )}
       </View>
 
-      {/* Model Selection */}
-      <View style={styles.profileCard}>
+      {/* Persona */}
+      <TouchableOpacity
+        style={styles.profileCard}
+        onPress={() => { setSwipeIndex(PERSONAS.indexOf(persona)); setPersonaModalOpen(true); }}
+        activeOpacity={0.85}
+      >
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
             <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <Circle cx="12" cy="7" r="4" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
           </Svg>
-          <Text style={styles.profileSectionLabel}>MODEL SELECTION</Text>
+          <Text style={styles.profileSectionLabel}>PERSONA</Text>
         </View>
-        <View style={styles.modelDropdownWrap}>
-          <TouchableOpacity style={styles.modelDropdownTrigger} onPress={() => setModelDropdownOpen(v => !v)} activeOpacity={0.8}>
-            <Text style={styles.modelDropdownTriggerText} numberOfLines={1}>{cognitiveModel}</Text>
-            <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.modelDropdownChevron}>
-              <Path fill={THEME.textDim} d="M7 10l5 5 5-5H7z" />
+
+        {/* Inline graphic */}
+        <View style={styles.personaCardGraphic}>
+          {persona === 'Engineer' && (
+            <Svg width="100%" height={60} viewBox="0 0 240 80">
+              <Line x1="0" y1="40" x2="240" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+              <Line x1="40" y1="0" x2="40" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+              <Line x1="80" y1="0" x2="80" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+              <Line x1="120" y1="0" x2="120" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+              <Line x1="160" y1="0" x2="160" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+              <Line x1="200" y1="0" x2="200" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+              <Polyline points="0,40 40,40 40,20 80,20 80,55 120,55 120,15 160,15 160,50 200,50 200,30 240,30" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <Circle cx="40" cy="20" r="3" fill={THEME.accent} />
+              <Circle cx="80" cy="55" r="3" fill={THEME.accent} />
+              <Circle cx="120" cy="15" r="3" fill={THEME.accent} />
+              <Circle cx="160" cy="50" r="3" fill={THEME.accent} />
+              <Circle cx="200" cy="30" r="3" fill={THEME.accent} />
             </Svg>
-          </TouchableOpacity>
-          {modelDropdownOpen && (
-            <View style={styles.modelDropdownList}>
-              {(['Architect', 'Strategist', 'Builder', 'Analyst'] as const).map(m => (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.modelDropdownItem, cognitiveModel === m && styles.modelDropdownItemActive]}
-                  onPress={() => { setCognitiveModel(m); setModelDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.modelDropdownItemText, cognitiveModel === m && styles.modelDropdownItemTextActive]}>{m}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          )}
+          {persona === 'Seeker' && (
+            <Svg width="100%" height={60} viewBox="0 0 240 80">
+              <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+              <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" />
+              <Circle cx="0" cy="55" r="4" fill={THEME.accent} opacity="0.5" />
+              <Circle cx="80" cy="40" r="4" fill={THEME.accent} opacity="0.7" />
+              <Circle cx="160" cy="20" r="5" fill={THEME.accent} />
+              <Circle cx="240" cy="25" r="4" fill={THEME.accent} opacity="0.7" />
+              <Line x1="80" y1="40" x2="80" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
+              <Line x1="160" y1="20" x2="160" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
+            </Svg>
+          )}
+          {persona === 'Spiritual' && (
+            <Svg width="100%" height={60} viewBox="0 0 240 80">
+              <Path d="M0,40 C30,10 60,70 120,40 C180,10 210,70 240,40" fill="none" stroke={THEME.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+              <Path d="M0,50 C30,20 60,80 120,50 C180,20 210,80 240,50" fill="none" stroke={THEME.accent} strokeWidth="1" strokeLinecap="round" opacity="0.2" />
+              <Circle cx="40" cy="22" r="2.5" fill={THEME.accent} opacity="0.6" />
+              <Circle cx="90" cy="58" r="2" fill={THEME.accent} opacity="0.5" />
+              <Circle cx="120" cy="40" r="4" fill={THEME.accent} />
+              <Circle cx="155" cy="18" r="2.5" fill={THEME.accent} opacity="0.6" />
+              <Circle cx="200" cy="62" r="2" fill={THEME.accent} opacity="0.5" />
+              <Line x1="40" y1="22" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+              <Line x1="155" y1="18" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+              <Line x1="90" y1="58" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+              <Line x1="200" y1="62" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+            </Svg>
           )}
         </View>
-        <View style={styles.modelYouAreBlock}>
-          <Text style={styles.modelYouAreLabel}>YOU ARE...</Text>
-          <Text style={styles.modelYouAreText}>{MODEL_DESCRIPTIONS[cognitiveModel]}</Text>
-        </View>
-      </View>
 
-      {/* Peak Period */}
-      <View style={styles.profileCard}>
-        <View style={styles.profileSectionHeaderRow}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Circle cx="12" cy="12" r="5" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M12 2v2M12 20v2M4 12H2M22 12h-2M6.34 6.34l1.42-1.42M16.24 16.24l1.42-1.42M6.34 17.66l-1.42-1.42M16.24 7.76l-1.42-1.42" />
+        <View style={styles.personaPreviewRow}>
+          <Text style={styles.personaPreviewName}>{persona.toUpperCase()}</Text>
+          <Svg width={14} height={14} viewBox="0 0 24 24">
+            <Path fill="none" stroke={THEME.textDim} strokeWidth="2" strokeLinecap="round" d="M9 6l6 6-6 6" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>PEAK PERIOD</Text>
         </View>
-        <View style={styles.peakPeriodRow}>
-          <TouchableOpacity
-            style={[styles.peakBlock, peakPeriod === 'MORNING' && styles.peakBlockActiveMorning]}
-            onPress={() => setPeakPeriod('MORNING')}
-            activeOpacity={0.9}
-          >
-            <Svg width={16} height={16} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
-              <Circle cx="12" cy="12" r="5" fill="none" stroke={peakPeriod === 'MORNING' ? '#EAB308' : THEME.textDim} strokeWidth={1.5} />
-              <Path fill="none" stroke={peakPeriod === 'MORNING' ? '#EAB308' : THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M12 2v2M12 20v2M4 12H2M22 12h-2M6.34 6.34l1.42-1.42M16.24 16.24l1.42-1.42M6.34 17.66l-1.42-1.42M16.24 7.76l-1.42-1.42" />
-            </Svg>
-            <View>
-              <Text style={[styles.peakBlockTitle, peakPeriod === 'MORNING' && styles.peakBlockTitleActiveMorning]}>MORNING</Text>
-              <Text style={[styles.peakBlockSub, peakPeriod === 'MORNING' && styles.peakBlockSubActiveMorning]}>0600-1200</Text>
+        <Text style={styles.personaPreviewLine}>{PERSONA_DATA[persona].lines[0]}</Text>
+      </TouchableOpacity>
+
+      {/* Persona modal */}
+      <Modal visible={personaModalOpen} animationType="fade" transparent>
+        <View style={styles.personaOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setPersonaModalOpen(false)} activeOpacity={1} />
+          <View style={styles.personaModal}>
+            <Text style={styles.personaModalTitle}>PERSONA</Text>
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              contentOffset={{ x: swipeIndex * CARD_WIDTH, y: 0 }}
+              onMomentumScrollEnd={e => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH);
+                setSwipeIndex(idx);
+              }}
+              style={{ width: CARD_WIDTH }}
+            >
+              {PERSONAS.map((p) => (
+                <View key={p} style={[styles.personaSlide, { width: CARD_WIDTH }]}>
+                  {/* Line graphic */}
+                  <View style={styles.personaGraphic}>
+                    {p === 'Engineer' && (
+                      <Svg width="100%" height={80} viewBox="0 0 240 80">
+                        <Line x1="0" y1="40" x2="240" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                        <Line x1="40" y1="0" x2="40" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+                        <Line x1="80" y1="0" x2="80" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+                        <Line x1="120" y1="0" x2="120" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+                        <Line x1="160" y1="0" x2="160" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+                        <Line x1="200" y1="0" x2="200" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
+                        <Polyline points="0,40 40,40 40,20 80,20 80,55 120,55 120,15 160,15 160,50 200,50 200,30 240,30" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <Circle cx="40" cy="20" r="3" fill={THEME.accent} />
+                        <Circle cx="80" cy="55" r="3" fill={THEME.accent} />
+                        <Circle cx="120" cy="15" r="3" fill={THEME.accent} />
+                        <Circle cx="160" cy="50" r="3" fill={THEME.accent} />
+                        <Circle cx="200" cy="30" r="3" fill={THEME.accent} />
+                      </Svg>
+                    )}
+                    {p === 'Seeker' && (
+                      <Svg width="100%" height={80} viewBox="0 0 240 80">
+                        <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                        <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" />
+                        <Circle cx="0" cy="55" r="4" fill={THEME.accent} opacity="0.5" />
+                        <Circle cx="80" cy="40" r="4" fill={THEME.accent} opacity="0.7" />
+                        <Circle cx="160" cy="20" r="5" fill={THEME.accent} />
+                        <Circle cx="240" cy="25" r="4" fill={THEME.accent} opacity="0.7" />
+                        <Line x1="80" y1="40" x2="80" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
+                        <Line x1="160" y1="20" x2="160" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
+                      </Svg>
+                    )}
+                    {p === 'Spiritual' && (
+                      <Svg width="100%" height={80} viewBox="0 0 240 80">
+                        <Path d="M0,40 C30,10 60,70 120,40 C180,10 210,70 240,40" fill="none" stroke={THEME.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+                        <Path d="M0,50 C30,20 60,80 120,50 C180,20 210,80 240,50" fill="none" stroke={THEME.accent} strokeWidth="1" strokeLinecap="round" opacity="0.2" />
+                        <Circle cx="40" cy="22" r="2.5" fill={THEME.accent} opacity="0.6" />
+                        <Circle cx="90" cy="58" r="2" fill={THEME.accent} opacity="0.5" />
+                        <Circle cx="120" cy="40" r="4" fill={THEME.accent} />
+                        <Circle cx="155" cy="18" r="2.5" fill={THEME.accent} opacity="0.6" />
+                        <Circle cx="200" cy="62" r="2" fill={THEME.accent} opacity="0.5" />
+                        <Line x1="40" y1="22" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                        <Line x1="155" y1="18" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                        <Line x1="90" y1="58" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                        <Line x1="200" y1="62" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
+                      </Svg>
+                    )}
+                  </View>
+                  <Text style={styles.personaSlideName}>{p.toUpperCase()}</Text>
+                  {PERSONA_DATA[p].lines.map((line, i) => (
+                    <Text key={i} style={[styles.personaSlideLine, i === 0 && { opacity: 1 }, i === 1 && { opacity: 0.7 }, i === 2 && { opacity: 0.5 }]}>{line}</Text>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Dots */}
+            <View style={styles.personaDots}>
+              {PERSONAS.map((_, i) => (
+                <View key={i} style={[styles.personaDot, i === swipeIndex && styles.personaDotActive]} />
+              ))}
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.peakBlock, peakPeriod === 'EVENING' && styles.peakBlockActiveEvening]}
-            onPress={() => setPeakPeriod('EVENING')}
-            activeOpacity={0.9}
-          >
-            <Svg width={16} height={16} viewBox="0 0 24 24" style={{ marginRight: 8 }}>
-              <Path fill="none" stroke={peakPeriod === 'EVENING' ? '#F97316' : THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </Svg>
-            <View>
-              <Text style={[styles.peakBlockTitle, peakPeriod === 'EVENING' && styles.peakBlockTitleActiveEvening]}>EVENING</Text>
-              <Text style={[styles.peakBlockSub, peakPeriod === 'EVENING' && styles.peakBlockSubActiveEvening]}>1800-0000</Text>
-            </View>
-          </TouchableOpacity>
+
+            {/* Select button */}
+            <TouchableOpacity
+              style={[styles.personaSelectBtn, { borderColor: THEME.accent }]}
+              onPress={() => { setPersona(PERSONAS[swipeIndex]); setPersonaModalOpen(false); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.personaSelectBtnText, { color: THEME.accent }]}>
+                SELECT {PERSONAS[swipeIndex].toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </Modal>
 
       {/* Motivators */}
       <View style={styles.profileCard}>
-        <View style={[styles.profileSectionHeaderRow, { justifyContent: 'space-between', marginBottom: 12 }]}>
-          <View style={styles.profileSectionHeaderRow}>
-            <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-              <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </Svg>
-            <Text style={styles.profileSectionLabel}>MOTIVATORS</Text>
-          </View>
-          <Text style={styles.motivatorsCounter}>{motivators.length}/3 SELECTED</Text>
+        <View style={styles.profileSectionHeaderRow}>
+          <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </Svg>
+          <Text style={styles.profileSectionLabel}>MOTIVATORS</Text>
         </View>
-        <View style={styles.motivatorsGrid}>
-          {MOTIVATOR_OPTIONS.map(m => {
-            const sel = motivators.includes(m);
-            return (
-              <TouchableOpacity
-                key={m}
-                style={[styles.motivatorChip, sel && styles.motivatorChipActive]}
-                onPress={() => {
-                  if (sel) setMotivators(motivators.filter(x => x !== m));
-                  else if (motivators.length < 3) setMotivators([...motivators, m]);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.motivatorChipText, sel && styles.motivatorChipTextActive]}>{m}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {MOTIVATOR_TENSIONS.map(tension => {
+          const choice = motivatorChoices[tension.id];
+          return (
+            <View key={tension.id} style={styles.tensionRow}>
+              <View style={styles.tensionPill}>
+                <TouchableOpacity
+                  style={[styles.tensionSide, choice === 'left' && styles.tensionSideActive]}
+                  onPress={() => handleTensionSelect(tension.id, 'left')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tensionSideText, choice === 'left' && styles.tensionSideTextActive]}>
+                    {tension.left}
+                  </Text>
+                </TouchableOpacity>
+                <View style={styles.tensionDivider} />
+                <TouchableOpacity
+                  style={[styles.tensionSide, choice === 'right' && styles.tensionSideActive]}
+                  onPress={() => handleTensionSelect(tension.id, 'right')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tensionSideText, choice === 'right' && styles.tensionSideTextActive]}>
+                    {tension.right}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
       </View>
 
       {/* Identity Notes */}
@@ -174,19 +290,79 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
             <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>IDENTITY NOTES</Text>
+          <Text style={styles.profileSectionLabel}>CONTEXT</Text>
         </View>
         <TextInput
           style={styles.profileTextArea}
           value={identityNotes}
           onChangeText={setIdentityNotes}
-          placeholder="Input analytical context"
+          placeholder="Who are you right now? What are you building, fighting, or becoming?"
           placeholderTextColor={THEME.textDim}
           multiline
           numberOfLines={4}
           textAlignVertical="top"
         />
       </View>
+
+      {/* Logbook */}
+      <View style={styles.profileCard}>
+        <View style={styles.profileSectionHeaderRow}>
+          <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
+            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+          </Svg>
+          <Text style={styles.profileSectionLabel}>LOGBOOK</Text>
+        </View>
+
+        {snapshots.length === 0 ? (
+          <View style={styles.logbookEmpty}>
+            <Text style={styles.logbookEmptyTitle}>NO ENTRIES YET</Text>
+            <Text style={styles.logbookEmptyBody}>
+              When a node average crosses 7.0, a snapshot of your Atlas is saved here automatically.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.logbookScroll}
+          >
+            {snapshots.map(snap => {
+              const d = new Date(snap.createdAt);
+              const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              const yearStr = d.getFullYear().toString();
+              const triggerNode = snap.nodeScores.find(n => n.nodeId === snap.triggerNodeId);
+              return (
+                <TouchableOpacity key={snap.id} style={styles.logbookCard} onPress={() => setSelectedSnapshot(snap)} activeOpacity={0.8}>
+                  <MiniRadar nodes={snap.nodeScores} size={88} />
+                  <View style={styles.logbookCardMeta}>
+                    <Text style={styles.logbookCardDate}>{dateStr}</Text>
+                    <Text style={styles.logbookCardYear}>{yearStr}</Text>
+                    <View style={[styles.logbookCardDot, { backgroundColor: triggerNode?.color ?? THEME.accent }]} />
+                    <Text style={[styles.logbookCardNode, { color: triggerNode?.color ?? THEME.accent }]}>
+                      {snap.triggerNodeName.toUpperCase()}
+                    </Text>
+                    <Text style={styles.logbookCardAvg}>{snap.triggerNodeAvg.toFixed(1)}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Snapshot detail modal */}
+      {selectedSnapshot && (
+        <SnapshotDetailModal
+          visible={!!selectedSnapshot}
+          onClose={() => setSelectedSnapshot(null)}
+          nodes={selectedSnapshot.nodeScores}
+          label={new Date(selectedSnapshot.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
+          triggerNode={selectedSnapshot.nodeScores.find(n => n.nodeId === selectedSnapshot.triggerNodeId)
+            ? { name: selectedSnapshot.triggerNodeName, color: selectedSnapshot.nodeScores.find(n => n.nodeId === selectedSnapshot.triggerNodeId)!.color, avg: selectedSnapshot.triggerNodeAvg }
+            : null}
+        />
+      )}
 
       {/* Developer Override */}
       <View style={styles.devOverrideSection}>
@@ -210,35 +386,46 @@ const styles = StyleSheet.create({
   profileSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   profileSectionIcon: { marginRight: 8 },
   profileSectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 },
-  motivatorsCounter: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
-  motivatorsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  motivatorChip: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, width: '31%' },
-  motivatorChipActive: { borderColor: '#22C55E', backgroundColor: 'rgba(34, 197, 94, 0.15)' },
-  motivatorChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' },
-  motivatorChipTextActive: { color: '#22C55E', fontWeight: '700' },
-  modelDropdownWrap: { marginTop: 4 },
-  modelDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: THEME.border, borderRadius: 4 },
-  modelDropdownTriggerText: { color: THEME.border, fontSize: 14, flex: 1 },
-  modelDropdownChevron: { marginLeft: 8 },
-  modelDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' },
-  modelDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  modelDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  modelDropdownItemText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' },
-  modelDropdownItemTextActive: { color: THEME.accent, fontWeight: '700' },
-  modelYouAreBlock: { marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
-  modelYouAreLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 6 },
-  modelYouAreText: { color: THEME.border, fontSize: 14, lineHeight: 20, fontWeight: '400' },
-  peakPeriodRow: { flexDirection: 'row', gap: 12 },
-  peakBlock: { flex: 1, flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  peakBlockActiveMorning: { borderWidth: 2, borderColor: '#EAB308', backgroundColor: 'rgba(234, 179, 8, 0.12)', shadowColor: '#EAB308', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 },
-  peakBlockActiveEvening: { borderWidth: 2, borderColor: '#F97316', backgroundColor: 'rgba(249, 115, 22, 0.12)', shadowColor: '#F97316', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10 },
-  peakBlockTitle: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 },
-  peakBlockTitleActiveMorning: { color: '#EAB308' },
-  peakBlockTitleActiveEvening: { color: '#F97316' },
-  peakBlockSub: { color: THEME.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginTop: 4 },
-  peakBlockSubActiveMorning: { color: 'rgba(234, 179, 8, 0.95)' },
-  peakBlockSubActiveEvening: { color: 'rgba(249, 115, 22, 0.95)' },
+  tensionRow: { marginBottom: 10 },
+  tensionPill: { flexDirection: 'row', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.03)' },
+  tensionSide: { flex: 1, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
+  tensionSideActive: { backgroundColor: 'rgba(56,189,248,0.14)' },
+  tensionSideText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: THEME.textDim },
+  tensionSideTextActive: { color: THEME.accent },
+  tensionDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
+  // Persona card preview
+  personaCardGraphic: { width: '100%', height: 60, marginBottom: 16, overflow: 'hidden' },
+  personaPreviewRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  personaPreviewName: { color: 'white', fontSize: 16, fontWeight: '800', letterSpacing: 2 },
+  personaPreviewLine: { color: THEME.textDim, fontSize: 13, lineHeight: 18, fontStyle: 'italic' },
+
+  // Persona modal
+  personaOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
+  personaModal: { backgroundColor: THEME.card, borderRadius: 20, paddingTop: 28, paddingBottom: 24, paddingHorizontal: 0, width: SCREEN_WIDTH - 40, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(56,189,248,0.15)', shadowColor: THEME.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 20 },
+  personaModalTitle: { color: THEME.textDim, fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 20 },
+  personaSlide: { paddingHorizontal: 24, alignItems: 'center' },
+  personaGraphic: { width: '100%', height: 80, marginBottom: 20, overflow: 'hidden' },
+  personaSlideName: { color: 'white', fontSize: 18, fontWeight: '800', letterSpacing: 3, marginBottom: 14, textAlign: 'center' },
+  personaSlideLine: { color: 'white', fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 4, opacity: 1, fontStyle: 'italic' },
+  personaDots: { flexDirection: 'row', gap: 8, marginTop: 20, marginBottom: 20 },
+  personaDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
+  personaDotActive: { backgroundColor: THEME.accent, width: 20, borderRadius: 3 },
+  personaSelectBtn: { paddingVertical: 10, paddingHorizontal: 28, borderRadius: 20, borderWidth: 1 },
+  personaSelectBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 2 },
   profileTextArea: { borderWidth: 1, borderColor: THEME.border, borderRadius: 4, color: 'white', fontSize: 14, padding: 12, minHeight: 100, textAlignVertical: 'top' },
+  // Logbook
+  logbookEmpty: { paddingVertical: 20, alignItems: 'center' },
+  logbookEmptyTitle: { color: THEME.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
+  logbookEmptyBody: { color: THEME.textDim, fontSize: 12, lineHeight: 18, textAlign: 'center', opacity: 0.7 },
+  logbookScroll: { paddingBottom: 4, gap: 12 },
+  logbookCard: { width: 100, alignItems: 'center', backgroundColor: THEME.bg, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  logbookCardMeta: { alignItems: 'center', marginTop: 8, gap: 2 },
+  logbookCardDate: { color: 'white', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  logbookCardYear: { color: THEME.textDim, fontSize: 10, letterSpacing: 0.5, marginBottom: 4 },
+  logbookCardDot: { width: 5, height: 5, borderRadius: 3, marginBottom: 2 },
+  logbookCardNode: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+  logbookCardAvg: { color: THEME.textDim, fontSize: 11, fontWeight: '600', marginTop: 1 },
+
   devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 },
   devOverrideLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 10 },
   devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

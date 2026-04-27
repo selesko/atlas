@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated, Modal, PanResponder, Dimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { TaskFilter } from '../types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface TasksScreenProps {
   addTaskOpen: boolean;
@@ -25,7 +27,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   onOpenEditTask,
   onOpenCoordEdit,
 }) => {
-  const { nodes, toggleTask, togglePriority } = useAppStore();
+  const { nodes, toggleTask, togglePriority, updateValue } = useAppStore();
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('ALL');
   const [addTaskTitle, setAddTaskTitle] = useState('');
   const [addTaskCoordDropdownOpen, setAddTaskCoordDropdownOpen] = useState(false);
@@ -35,6 +37,30 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   const [nudge, setNudge] = useState<{ nodeId: string; goalId: string; goalName: string; color: string } | null>(null);
   const nudgeAnim = useRef(new Animated.Value(0)).current;
   const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // — score reflection modal state —
+  type ScoreReflection = {
+    nodeId: string; goalId: string; goalName: string;
+    taskTitle: string; nodeColor: string; currentValue: number;
+  };
+  const [scoreReflection, setScoreReflection] = useState<ScoreReflection | null>(null);
+  const [reflectionValue, setReflectionValue] = useState(5);
+  const reflectionTrackWidth = useRef(0);
+  const reflectionSliderPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const w = reflectionTrackWidth.current || SCREEN_WIDTH - 80;
+        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+        setReflectionValue(Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1)));
+      },
+      onPanResponderMove: (evt) => {
+        const w = reflectionTrackWidth.current || SCREEN_WIDTH - 80;
+        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+        setReflectionValue(Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1)));
+      },
+    })
+  ).current;
 
   const showNudge = (nodeId: string, goalId: string, goalName: string, color: string) => {
     if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
@@ -51,17 +77,21 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   useEffect(() => () => { if (nudgeTimer.current) clearTimeout(nudgeTimer.current); }, []);
 
   const handleToggleTask = (nodeId: string, goalId: string, taskId: string) => {
-    // Check current state before toggle to detect completion
-    const task = nodes
-      .find(n => n.id === nodeId)?.goals
-      .find(g => g.id === goalId)?.tasks
-      .find(t => t.id === taskId);
+    const node = nodes.find(n => n.id === nodeId);
+    const goal = node?.goals.find(g => g.id === goalId);
+    const task = goal?.tasks.find(t => t.id === taskId);
     const wasIncomplete = task && !task.completed;
     toggleTask(nodeId, goalId, taskId);
-    if (wasIncomplete) {
-      const node = nodes.find(n => n.id === nodeId);
-      const goal = node?.goals.find(g => g.id === goalId);
-      if (node && goal) showNudge(nodeId, goalId, goal.name, node.color);
+    if (wasIncomplete && node && goal && task) {
+      // Open score reflection modal
+      setReflectionValue(goal.value);
+      setScoreReflection({
+        nodeId, goalId,
+        goalName: goal.name,
+        taskTitle: task.title,
+        nodeColor: node.color,
+        currentValue: goal.value,
+      });
     }
   };
 
@@ -269,6 +299,71 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
           </View>
         ))
       )}
+      {/* Score reflection modal */}
+      <Modal visible={!!scoreReflection} animationType="slide" transparent>
+        {scoreReflection && (
+          <View style={styles.reflectionOverlay}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setScoreReflection(null)} activeOpacity={1} />
+            <View style={styles.reflectionCard}>
+              <Text style={styles.reflectionTaskLabel} numberOfLines={2}>{scoreReflection.taskTitle}</Text>
+              <Text style={styles.reflectionQuestion}>
+                Did completing this move{'\n'}
+                <Text style={[styles.reflectionCoordName, { color: scoreReflection.nodeColor }]}>
+                  {scoreReflection.goalName.toUpperCase()}
+                </Text>
+                {'\n'}forward?
+              </Text>
+
+              {/* Value display */}
+              <View style={styles.reflectionValueRow}>
+                <Text style={styles.reflectionValueOld}>{scoreReflection.currentValue}</Text>
+                <Text style={styles.reflectionArrow}>→</Text>
+                <Text style={[styles.reflectionValueNew, { color: reflectionValue > scoreReflection.currentValue ? '#4ade80' : reflectionValue < scoreReflection.currentValue ? '#fb7185' : THEME.textDim }]}>
+                  {reflectionValue}
+                </Text>
+              </View>
+
+              {/* Slider */}
+              <View
+                style={styles.reflectionSliderTrack}
+                onLayout={e => { reflectionTrackWidth.current = e.nativeEvent.layout.width; }}
+                {...reflectionSliderPan.panHandlers}
+              >
+                <View style={[styles.reflectionSliderLine, { backgroundColor: scoreReflection.nodeColor, opacity: 0.25 }]} />
+                <View style={[styles.reflectionSliderFill, { width: `${reflectionValue * 10}%`, backgroundColor: scoreReflection.nodeColor }]} />
+                <View style={[styles.reflectionSliderHandle, { left: `${reflectionValue * 10}%`, borderColor: scoreReflection.nodeColor }]}>
+                  <View style={[styles.reflectionSliderHandleInner, { backgroundColor: scoreReflection.nodeColor }]} />
+                </View>
+              </View>
+
+              {/* Actions */}
+              <TouchableOpacity
+                style={[styles.reflectionUpdateBtn, { borderColor: scoreReflection.nodeColor }]}
+                onPress={() => {
+                  updateValue(scoreReflection.nodeId, scoreReflection.goalId, reflectionValue);
+                  setScoreReflection(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.reflectionUpdateText, { color: scoreReflection.nodeColor }]}>UPDATE SCORE</Text>
+              </TouchableOpacity>
+
+              <View style={styles.reflectionSecondaryRow}>
+                <TouchableOpacity
+                  onPress={() => { setScoreReflection(null); onOpenCoordEdit(scoreReflection.nodeId, scoreReflection.goalId); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reflectionEvidenceLink}>LOG EVIDENCE →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setScoreReflection(null)} activeOpacity={0.7}>
+                  <Text style={styles.reflectionSkipText}>NOT THIS TIME</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+      </Modal>
+
       {/* Evidence nudge bar */}
       {nudge && (
         <Animated.View style={[
@@ -349,6 +444,26 @@ const styles = StyleSheet.create({
   taskGoal: { color: THEME.textDim, fontSize: 14, fontWeight: '800', marginTop: 4 },
   taskEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   taskEmptyStateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  // Score reflection modal
+  reflectionOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(8, 8, 15, 0.85)' },
+  reflectionCard: { backgroundColor: THEME.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 44 },
+  reflectionTaskLabel: { color: THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 16, textTransform: 'uppercase' },
+  reflectionQuestion: { color: 'white', fontSize: 22, fontWeight: '200', letterSpacing: 2, lineHeight: 32, marginBottom: 24, textAlign: 'center' },
+  reflectionCoordName: { fontSize: 22, fontWeight: '600', letterSpacing: 3 },
+  reflectionValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 20 },
+  reflectionValueOld: { color: THEME.textDim, fontSize: 36, fontWeight: '200' },
+  reflectionArrow: { color: THEME.textDim, fontSize: 20, fontWeight: '200' },
+  reflectionValueNew: { fontSize: 48, fontWeight: '200', letterSpacing: 2 },
+  reflectionSliderTrack: { height: 32, justifyContent: 'center', marginBottom: 28, marginHorizontal: 4 },
+  reflectionSliderLine: { height: 2, width: '100%' },
+  reflectionSliderFill: { position: 'absolute', left: 0, top: 15, height: 2, opacity: 0.7 },
+  reflectionSliderHandle: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: 'transparent', borderWidth: 2, top: 8, marginLeft: -8, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 8 },
+  reflectionSliderHandleInner: { width: 8, height: 8, borderRadius: 4 },
+  reflectionUpdateBtn: { paddingVertical: 14, borderWidth: 1, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+  reflectionUpdateText: { fontSize: 14, fontWeight: '800', letterSpacing: 3 },
+  reflectionSecondaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reflectionEvidenceLink: { color: THEME.accent, fontSize: 13, fontWeight: '700', letterSpacing: 1.5 },
+  reflectionSkipText: { color: THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 1.5 },
   nudgeBar: { marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0c1420', borderRadius: 10, borderLeftWidth: 3, paddingVertical: 12, paddingHorizontal: 14 },
   nudgeContent: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   nudgeDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },

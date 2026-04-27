@@ -157,8 +157,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                 const glow = getMomentumGlow(momentum);
                 const sliderColor = getMomentumSliderColor(node.color, momentum);
                 return (
-                  <View
+                  <TouchableOpacity
                     key={goal.id}
+                    activeOpacity={0.75}
+                    onPress={() => onOpenCoordEdit(node.id, goal.id)}
                     style={[
                       styles.nodeOverlayCoord,
                       glow.opacity > 0 && {
@@ -171,32 +173,16 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                       },
                     ]}
                   >
+                    {/* Title row: name + evidence dot + sparkline */}
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
+                        <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
                         <Text style={styles.goalName}>{goal.name}</Text>
-                        <Sparkline goal={goal} color={node.color} />
                       </View>
-                      <TouchableOpacity onPress={() => onOpenCoordEdit(node.id, goal.id)} activeOpacity={0.8}>
-                        <Text style={styles.editCoordBtn}>Edit</Text>
-                      </TouchableOpacity>
+                      <Sparkline goal={goal} color={node.color} />
                     </View>
 
-                    {/* Evidence status row */}
-                    <TouchableOpacity
-                      onPress={() => onOpenCoordEdit(node.id, goal.id)}
-                      activeOpacity={0.7}
-                      style={styles.evidenceRow}
-                    >
-                      <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
-                      {hasEvidence ? (
-                        <Text style={[styles.evidenceText, { color: node.color + 'cc' }]} numberOfLines={1}>
-                          {goal.evidence!.trim()}
-                        </Text>
-                      ) : (
-                        <Text style={styles.evidenceMissing}>LOG EVIDENCE  →</Text>
-                      )}
-                    </TouchableOpacity>
-
+                    {/* Slider — no value circle */}
                     <View style={styles.sliderRow}>
                       <View
                         style={styles.sliderTrack}
@@ -206,14 +192,11 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                         <View style={[styles.sliderLine, { backgroundColor: sliderColor, opacity: 0.3 }]} />
                         <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: sliderColor }]} />
                         <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
-                          <View style={[styles.sliderHandleInner, { backgroundColor: '#38BDF8' }]} />
+                          <View style={[styles.sliderHandleInner, { backgroundColor: sliderColor }]} />
                         </View>
                       </View>
-                      <View style={styles.valueCircle}>
-                        <Text style={[styles.valueCircleText, { color: node.color }]}>{goal.value}</Text>
-                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
               <TouchableOpacity

@@ -35,6 +35,10 @@ interface AppState {
   // Persistence
   loadUserData: () => Promise<void>;
 
+  // Onboarding
+  hasCompletedOnboarding: boolean;
+  setHasCompletedOnboarding: (value: boolean) => void;
+
   // Node actions
   updateValue: (nodeId: string, goalId: string, val: number) => void;
   updateGoal: (nodeId: string, goalId: string, patch: Partial<Pick<Goal, 'name' | 'evidence'>>) => void;
@@ -74,6 +78,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   session: null,
   devOverride: false,
   hasAccess: false,
+  hasCompletedOnboarding: false,
+
+  setHasCompletedOnboarding: (value) => set({ hasCompletedOnboarding: value }),
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 

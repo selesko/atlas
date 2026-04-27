@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './lib/supabase';
 import { useAppStore } from './src/stores/useAppStore';
 import { FadingBorder } from './src/components/FadingBorder';
@@ -14,7 +15,9 @@ import { AtlasScreen } from './src/screens/AtlasScreen';
 import { NodesScreen } from './src/screens/NodesScreen';
 import { TasksScreen } from './src/screens/TasksScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 
+const ONBOARDING_KEY = 'calibra_onboarding_complete';
 const { width } = Dimensions.get('window');
 
 type CopilotSuggestion = { label: string; action: string; nodeId?: string; goalId?: string };
@@ -63,6 +66,10 @@ export default function App() {
   // — slider track widths for coordinate edit modal —
   const trackWidths = useRef<Record<string, number>>({});
 
+  // — onboarding state —
+  const [onboardingReady, setOnboardingReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   // — store —
   const {
     nodes, hasAccess, session,
@@ -70,6 +77,7 @@ export default function App() {
     updateValue, updateNode, addNode: storeAddNode, saveTaskEdit,
     toggleTask, getNodeAvg,
     setSession, loadUserData,
+    setCognitiveModel, setPeakPeriod, setMotivators,
   } = useAppStore();
 
   // — sync edit node form when editingNodeId changes —
@@ -79,6 +87,37 @@ export default function App() {
       if (node) setEditNodeForm({ name: node.name, description: node.description || '', color: node.color });
     }
   }, [editingNodeId, nodes]);
+
+  // — onboarding bootstrap — check AsyncStorage on mount —
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY).then(val => {
+      setShowOnboarding(val !== 'true');
+      setOnboardingReady(true);
+    }).catch(() => {
+      setShowOnboarding(false);
+      setOnboardingReady(true);
+    });
+  }, []);
+
+  const handleOnboardingComplete = useCallback(async (data: {
+    nodeUpdates: { id: string; name: string; description: string }[];
+    scores: { nodeId: string; goalId: string; value: number }[];
+    cognitiveModel: import('./src/types').CognitiveModel;
+    peakPeriod: import('./src/types').PeakPeriod;
+    motivators: string[];
+  }) => {
+    // Apply node renames
+    data.nodeUpdates.forEach(u => updateNode(u.id, { name: u.name, description: u.description }));
+    // Apply calibration scores
+    data.scores.forEach(s => updateValue(s.nodeId, s.goalId, s.value));
+    // Apply profile
+    setCognitiveModel(data.cognitiveModel);
+    setPeakPeriod(data.peakPeriod);
+    setMotivators(data.motivators);
+    // Mark onboarding done
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    setShowOnboarding(false);
+  }, [updateNode, updateValue, setCognitiveModel, setPeakPeriod, setMotivators]);
 
   // — supabase auth listener + header subtitle —
   useEffect(() => {
@@ -279,6 +318,29 @@ export default function App() {
   }, [addNodeForm, storeAddNode]);
 
   // ─── RENDER ──────────────────────────────────────────────────────────────────
+
+  // Show nothing until we've checked AsyncStorage (avoids flash)
+  if (!onboardingReady) return null;
+
+  // Show onboarding for first-time users
+  if (showOnboarding) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <OnboardingScreen
+          initialNodes={nodes.map(n => ({
+            id: n.id,
+            name: n.name,
+            description: n.description || '',
+            color: n.color,
+            goals: n.goals.map(g => ({ id: g.id, name: g.name, value: g.value })),
+          }))}
+          onComplete={handleOnboardingComplete}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />

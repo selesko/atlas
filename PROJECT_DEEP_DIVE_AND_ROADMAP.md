@@ -415,7 +415,29 @@ Most indie wellness apps that launch on the App Store earn **$0–$500/mo for th
 
 ---
 
-## 8. Concrete Next Three Actions
+## 8. UI & Functionality Polish — 10 Improvement Areas
+
+*Research-informed (MIT metacognition, Harvard self-reflection apps). Tracked April 2026.*
+
+| # | Area | Status | Notes |
+|---|------|--------|-------|
+| 1 | **Onboarding flow** — cold-start experience, no context given to new users | ✅ Complete | 6-step OnboardingScreen: Welcome → System → Name nodes → Profile → Calibration → Sign-up |
+| 2 | **Evidence indicators** — no visual signal that evidence is missing or logged | ✅ Complete | Amber dot (missing) / node-color dot (logged) on coordinate cards; post-completion nudge in Tasks |
+| 3 | **Visual momentum** — score history had no expressive visual output | ✅ Complete | Momentum-colored slider fill, card glow, value number display; sparkline explored but removed per preference |
+| 4 | **Co-pilot doesn't close the loop** — suggestions fire once and disappear | ✅ Complete | Last Cycle recap section in co-pilot modal: before/after value, node avg delta, momentum signal |
+| 5 | **Tasks disconnected from scores** — completing a task had no score pathway | ✅ Complete | Score reflection prompt (bottom sheet modal) fires on task completion: orbital dial to update coordinate score |
+| 6 | **No progress/win acknowledgment** — nothing marks meaningful improvement | 🔲 Pending | Threshold crossing, streak, node hitting a new high |
+| 7 | **Node intent is static** — desired intent description doesn't react to score state | 🔲 Pending | Intent should surface context-aware prompts based on current score range |
+| 8 | **Profile data doesn't shape experience** — cognitive model and peak period set but ignored | 🔲 Pending | Co-pilot and task suggestions should adapt to archetype and peak period |
+| 9 | **No weekly rhythm** — no check-in cadence, no sense of time passing | 🔲 Pending | Weekly review moment, cadence nudge, time-aware briefing |
+| 10 | **Visual hierarchy doesn't guide attention** — everything equally weighted | 🔲 Pending | Pull the eye toward lowest-scoring or most-drifted node |
+
+### Orbital Slider (bonus — in progress)
+The linear slider across all coordinate inputs is being replaced with a circular orbital dial inspired by the Calibra solar mark logo. Sun at center (shows current value), planet handle orbits the arc. Implemented in `OrbitalSlider.tsx`. Currently live in the coordinate edit modal and score reflection prompt. Card-level expand-on-press interaction planned next.
+
+---
+
+## 9. Concrete Next Three Actions
 
 The brand and domain are locked. Next:
 

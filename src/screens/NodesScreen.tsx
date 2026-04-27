@@ -3,9 +3,49 @@ import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } fr
 import Svg, { Circle } from 'react-native-svg';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
-import { Node } from '../types';
+import { Node, Goal } from '../types';
 
 const { width } = Dimensions.get('window');
+
+// ─── Score history helpers ─────────────────────────────────────────────────────
+
+/** Returns the 7-day delta for a coordinate: newest value − oldest value */
+function getCoordDelta(goal: Goal): number | null {
+  const hist = goal.scoreHistory;
+  if (!hist || hist.length < 2) return null;
+  const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted[sorted.length - 1].value - sorted[0].value;
+}
+
+/** Returns the average delta across all coordinates in a node */
+function getNodeDelta(node: Node): number | null {
+  const deltas = node.goals.map(getCoordDelta).filter((d): d is number => d !== null);
+  if (deltas.length === 0) return null;
+  return deltas.reduce((a, b) => a + b, 0) / deltas.length;
+}
+
+/** Renders a delta badge: ↑ +1.5 / ↓ -1.2 / nothing if flat */
+function DeltaBadge({ delta, color }: { delta: number | null; color: string }) {
+  if (delta === null || Math.abs(delta) < 0.2) return null;
+  const up = delta > 0;
+  const label = `${up ? '↑' : '↓'} ${up ? '+' : ''}${delta.toFixed(1)}`;
+  return (
+    <Text style={[styles.deltaBadge, { color: up ? '#4ade80' : '#fb7185' }]}>
+      {label}
+    </Text>
+  );
+}
+
+/** Small trend arrow for node header */
+function TrendArrow({ delta }: { delta: number | null }) {
+  if (delta === null || Math.abs(delta) < 0.2) return null;
+  const up = delta > 0;
+  return (
+    <Text style={[styles.trendArrow, { color: up ? '#4ade8088' : '#fb718588' }]}>
+      {up ? '↑' : '↓'}
+    </Text>
+  );
+}
 
 interface NodesScreenProps {
   selectedNodeId: string | null;
@@ -47,7 +87,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   )}
                 </View>
               </View>
-              <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
+              <View style={styles.nodeScoreBlock}>
+                <TrendArrow delta={getNodeDelta(node)} />
+                <Text style={styles.nodeScore}>{getNodeAvg(node)}</Text>
+              </View>
             </View>
           </TouchableOpacity>
 
@@ -79,7 +122,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                 return (
                   <View key={goal.id} style={styles.nodeOverlayCoord}>
                     <View style={styles.nodeOverlayCoordTitleRow}>
-                      <Text style={styles.goalName}>{goal.name}</Text>
+                      <View style={styles.goalNameRow}>
+                        <Text style={styles.goalName}>{goal.name}</Text>
+                        <DeltaBadge delta={getCoordDelta(goal)} color={node.color} />
+                      </View>
                       <TouchableOpacity onPress={() => onOpenCoordEdit(node.id, goal.id)} activeOpacity={0.8}>
                         <Text style={styles.editCoordBtn}>Edit</Text>
                       </TouchableOpacity>
@@ -158,6 +204,10 @@ const styles = StyleSheet.create({
   nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   nodeTitle: { fontSize: 28, fontWeight: '200', letterSpacing: 8 },
   nodeScore: { color: 'white', fontSize: 24, fontWeight: '200' },
+  nodeScoreBlock: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  trendArrow: { fontSize: 16, fontWeight: '300' },
+  goalNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deltaBadge: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   nodeExpanded: { paddingBottom: 30, paddingHorizontal: 20 },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 25 },
   coordinatesLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 16, textTransform: 'uppercase' },

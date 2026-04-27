@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+
+    <!-- Expo requires these exact styles on #root to work correctly -->
+    <style id="expo-reset">
+      html, body { height: 100%; margin: 0; padding: 0; }
+      #root { display: flex; flex: 1; height: 100%; }
+    </style>
+
+    <style>
+      /* ── Desktop shell ─────────────────────────────────── */
+      body {
+        background: #0d0d1a;
+        background-image:
+          radial-gradient(ellipse at 30% 20%, rgba(124,106,247,0.06) 0%, transparent 60%),
+          radial-gradient(ellipse at 70% 80%, rgba(56,189,248,0.04) 0%, transparent 60%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        overflow: auto;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      /* ── Wordmark above phone ───────────────────────────── */
+      .dev-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+      }
+      .dev-logo {
+        width: 22px; height: 22px;
+      }
+      .dev-title {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 4px;
+        color: #7C6AF7;
+        text-transform: uppercase;
+      }
+      .dev-badge {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        color: #333355;
+        background: #1a1a2e;
+        border: 1px solid #2a2a40;
+        border-radius: 4px;
+        padding: 2px 7px;
+        text-transform: uppercase;
+      }
+
+      /* ── Phone shell ────────────────────────────────────── */
+      .phone-wrap {
+        position: relative;
+        width: 390px;
+        flex-shrink: 0;
+      }
+
+      .phone-frame {
+        width: 390px;
+        height: 844px;
+        border-radius: 52px;
+        background: #08080F;
+        border: 1.5px solid #2e2e44;
+        box-shadow:
+          0 0 0 1px #1a1a2a,
+          0 50px 120px rgba(0, 0, 0, 0.9),
+          0 0 60px rgba(124, 106, 247, 0.04),
+          inset 0 0 0 1.5px #3a3a50;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Dynamic island */
+      .phone-island {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 118px;
+        height: 34px;
+        background: #000;
+        border-radius: 20px;
+        z-index: 9999;
+        pointer-events: none;
+      }
+
+      /* Side buttons */
+      .btn-power {
+        position: absolute;
+        right: -3px;
+        top: 174px;
+        width: 3px;
+        height: 72px;
+        background: #2e2e44;
+        border-radius: 0 2px 2px 0;
+      }
+      .btn-silent {
+        position: absolute;
+        left: -3px;
+        top: 126px;
+        width: 3px;
+        height: 36px;
+        background: #2e2e44;
+        border-radius: 2px 0 0 2px;
+      }
+      .btn-vol-up {
+        position: absolute;
+        left: -3px;
+        top: 178px;
+        width: 3px;
+        height: 66px;
+        background: #2e2e44;
+        border-radius: 2px 0 0 2px;
+      }
+      .btn-vol-down {
+        position: absolute;
+        left: -3px;
+        top: 258px;
+        width: 3px;
+        height: 66px;
+        background: #2e2e44;
+        border-radius: 2px 0 0 2px;
+      }
+
+      /* App root fills the phone frame */
+      #root {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        height: 844px;
+        overflow: hidden;
+        border-radius: 52px;
+      }
+
+      /* ── Footer label ───────────────────────────────────── */
+      .dev-footer {
+        margin-top: 18px;
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: #222235;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+
+      /* ── Scale to fit smaller windows ───────────────────── */
+      @media (max-height: 960px) {
+        .phone-frame { transform-origin: top center; }
+        .phone-wrap  { transform-origin: top center; }
+        body { justify-content: flex-start; padding-top: 20px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Wordmark -->
+    <div class="dev-header">
+      <svg class="dev-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="12" stroke="#7C6AF7" stroke-width="1.2" opacity="0.9"/>
+        <circle cx="16" cy="16" r="8" fill="#7C6AF7" opacity="0.2"/>
+        <circle cx="16" cy="16" r="4.8" fill="#7C6AF7" opacity="0.3"/>
+        <circle cx="16" cy="16" r="2.8" fill="white"/>
+        <g>
+          <animateTransform attributeName="transform" type="rotate"
+            from="0 16 16" to="360 16 16" dur="7s" repeatCount="indefinite"/>
+          <circle cx="28" cy="16" r="2.2" fill="white"/>
+        </g>
+      </svg>
+      <span class="dev-title">Calibra</span>
+      <span class="dev-badge">Dev Preview</span>
+    </div>
+
+    <!-- Phone frame -->
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <div class="phone-island"></div>
+        <div class="btn-power"></div>
+        <div class="btn-silent"></div>
+        <div class="btn-vol-up"></div>
+        <div class="btn-vol-down"></div>
+        <!-- App renders here -->
+        <div id="root"></div>
+      </div>
+    </div>
+
+    <div class="dev-footer">Web Preview · Not for distribution</div>
+  </body>
+</html>

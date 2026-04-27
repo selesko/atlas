@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Animated, Modal, PanResponder, Dimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { TaskFilter } from '../types';
-import { OrbitalSlider } from '../components/OrbitalSlider';
+import { OrbitalValueBadge } from '../components/OrbitalValueBadge';
 
 interface TasksScreenProps {
   addTaskOpen: boolean;
@@ -44,6 +44,21 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
   };
   const [scoreReflection, setScoreReflection] = useState<ScoreReflection | null>(null);
   const [reflectionValue, setReflectionValue] = useState(5);
+  const reflectionTrackWidth = useRef(0);
+  const reflectionPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (evt) => {
+        const w = reflectionTrackWidth.current || Dimensions.get('window').width - 80;
+        setReflectionValue(Math.max(1, Math.min(10, Math.round((Math.max(0, Math.min(evt.nativeEvent.locationX, w)) / w) * 9) + 1)));
+      },
+      onPanResponderMove: (evt) => {
+        const w = reflectionTrackWidth.current || Dimensions.get('window').width - 80;
+        setReflectionValue(Math.max(1, Math.min(10, Math.round((Math.max(0, Math.min(evt.nativeEvent.locationX, w)) / w) * 9) + 1)));
+      },
+    })
+  ).current;
 
   const showNudge = (nodeId: string, goalId: string, goalName: string, color: string) => {
     if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
@@ -297,14 +312,20 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({
                 {'\n'}forward?
               </Text>
 
-              {/* Orbital dial */}
-              <View style={{ alignItems: 'center', marginBottom: 8 }}>
-                <OrbitalSlider
-                  value={reflectionValue}
-                  color={scoreReflection.nodeColor}
-                  size={200}
-                  onValueChange={setReflectionValue}
-                />
+              {/* Slider + orbital badge */}
+              <View style={styles.reflectionSliderRow}>
+                <View
+                  style={styles.reflectionSliderTrack}
+                  onLayout={e => { reflectionTrackWidth.current = e.nativeEvent.layout.width; }}
+                  {...reflectionPan.panHandlers}
+                >
+                  <View style={[styles.reflectionSliderLine, { backgroundColor: scoreReflection.nodeColor, opacity: 0.25 }]} />
+                  <View style={[styles.reflectionSliderFill, { width: `${reflectionValue * 10}%`, backgroundColor: scoreReflection.nodeColor }]} />
+                  <View style={[styles.reflectionSliderHandle, { left: `${reflectionValue * 10}%`, borderColor: scoreReflection.nodeColor }]}>
+                    <View style={[styles.reflectionSliderHandleInner, { backgroundColor: scoreReflection.nodeColor }]} />
+                  </View>
+                </View>
+                <OrbitalValueBadge value={reflectionValue} color={scoreReflection.nodeColor} size={52} />
               </View>
 
               {/* Actions */}
@@ -421,14 +442,11 @@ const styles = StyleSheet.create({
   reflectionTaskLabel: { color: THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 16, textTransform: 'uppercase' },
   reflectionQuestion: { color: 'white', fontSize: 22, fontWeight: '200', letterSpacing: 2, lineHeight: 32, marginBottom: 24, textAlign: 'center' },
   reflectionCoordName: { fontSize: 22, fontWeight: '600', letterSpacing: 3 },
-  reflectionValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 20 },
-  reflectionValueOld: { color: THEME.textDim, fontSize: 36, fontWeight: '200' },
-  reflectionArrow: { color: THEME.textDim, fontSize: 20, fontWeight: '200' },
-  reflectionValueNew: { fontSize: 48, fontWeight: '200', letterSpacing: 2 },
-  reflectionSliderTrack: { height: 32, justifyContent: 'center', marginBottom: 28, marginHorizontal: 4 },
+  reflectionSliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 28 },
+  reflectionSliderTrack: { flex: 1, height: 32, justifyContent: 'center' },
   reflectionSliderLine: { height: 2, width: '100%' },
   reflectionSliderFill: { position: 'absolute', left: 0, top: 15, height: 2, opacity: 0.7 },
-  reflectionSliderHandle: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: 'transparent', borderWidth: 2, top: 8, marginLeft: -8, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 8 },
+  reflectionSliderHandle: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: 'transparent', borderWidth: 2, top: 8, marginLeft: -8, justifyContent: 'center', alignItems: 'center' },
   reflectionSliderHandleInner: { width: 8, height: 8, borderRadius: 4 },
   reflectionUpdateBtn: { paddingVertical: 14, borderWidth: 1, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
   reflectionUpdateText: { fontSize: 14, fontWeight: '800', letterSpacing: 3 },

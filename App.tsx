@@ -16,7 +16,7 @@ import { NodesScreen } from './src/screens/NodesScreen';
 import { TasksScreen } from './src/screens/TasksScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
-import { OrbitalSlider } from './src/components/OrbitalSlider';
+import { OrbitalValueBadge } from './src/components/OrbitalValueBadge';
 
 const ONBOARDING_KEY = 'calibra_onboarding_complete';
 const { width } = Dimensions.get('window');
@@ -575,21 +575,31 @@ export default function App() {
         const goal = node?.goals.find(g => g.id === editingCoordinate.goalId);
         if (!node || !goal) return null;
         const key = `${node.id}-${goal.id}`;
+        const applySlider = (evt: { nativeEvent: { locationX: number } }) => {
+          const w = trackWidths.current[key] || width - 40;
+          if (w <= 0) return;
+          const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+          const val = Math.round((x / w) * 9) + 1;
+          updateValue(node.id, goal.id, Math.max(1, Math.min(10, val)));
+        };
+        const pan = PanResponder.create({ onStartShouldSetPanResponder: () => true, onPanResponderGrant: applySlider, onPanResponderMove: applySlider });
         return (
           <View style={styles.infoOverlay} pointerEvents="box-none">
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingCoordinate(null)} activeOpacity={1} />
             <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
               <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
                 <Text style={styles.coordDetailName}>{goal.name}</Text>
-                <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the dial to evaluate yourself. Add calibrations below to keep you on your path.</Text>
+                <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the slider to evaluate yourself. Add calibrations below to keep you on your path.</Text>
                 <Text style={styles.reflectionQuestion}>HOW IS THE INTEGRITY OF THIS COORDINATE?</Text>
-                <View style={{ alignItems: 'center', marginVertical: 8 }}>
-                  <OrbitalSlider
-                    value={goal.value}
-                    color={node.color}
-                    size={200}
-                    onValueChange={(v) => updateValue(node.id, goal.id, v)}
-                  />
+                <View style={styles.sliderRow}>
+                  <View style={styles.sliderTrack} onLayout={e => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
+                    <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.3 }]} />
+                    <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
+                    <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
+                      <View style={[styles.sliderHandleInner, { backgroundColor: '#38BDF8' }]} />
+                    </View>
+                  </View>
+                  <OrbitalValueBadge value={goal.value} color={node.color} size={48} />
                 </View>
                 <Text style={styles.calibrationFeedLabel}>CALIBRATIONS</Text>
                 {goal.tasks.length === 0 ? (

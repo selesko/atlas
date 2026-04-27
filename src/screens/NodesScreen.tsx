@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } from 'react-native';
+import { OrbitalValueBadge } from '../components/OrbitalValueBadge';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
 import { Node, Goal } from '../types';
@@ -144,7 +145,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                         <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
                         <Text style={styles.goalName}>{goal.name}</Text>
                       </View>
-                      <Text style={[styles.coordValue, { color: sliderColor }]}>{goal.value}</Text>
+                      <OrbitalValueBadge value={goal.value} color={sliderColor} size={40} />
                     </View>
 
                     {/* Slider */}

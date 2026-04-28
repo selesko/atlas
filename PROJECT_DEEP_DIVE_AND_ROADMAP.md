@@ -426,14 +426,49 @@ Most indie wellness apps that launch on the App Store earn **$0–$500/mo for th
 | 3 | **Visual momentum** — score history had no expressive visual output | ✅ Complete | Momentum-colored slider fill, card glow, value number display; sparkline explored but removed per preference |
 | 4 | **Co-pilot doesn't close the loop** — suggestions fire once and disappear | ✅ Complete | Last Cycle recap section in co-pilot modal: before/after value, node avg delta, momentum signal |
 | 5 | **Tasks disconnected from scores** — completing a task had no score pathway | ✅ Complete | Score reflection prompt (bottom sheet modal) fires on task completion: orbital dial to update coordinate score |
-| 6 | **No progress/win acknowledgment** — nothing marks meaningful improvement | 🔲 Pending | Threshold crossing, streak, node hitting a new high |
-| 7 | **Node intent is static** — desired intent description doesn't react to score state | 🔲 Pending | Intent should surface context-aware prompts based on current score range |
-| 8 | **Profile data doesn't shape experience** — cognitive model and peak period set but ignored | 🔲 Pending | Co-pilot and task suggestions should adapt to archetype and peak period |
+| 6 | **No progress/win acknowledgment** — nothing marks meaningful improvement | ✅ Complete | Radar snapshot saved to logbook when node avg crosses 7.0; SnapshotDetailModal opens from logbook or Atlas radar tap; warp-star animation on open |
+| 7 | **Node intent is static** — desired intent description doesn't react to score state | ✅ Complete | AI-powered guidance line appears on node expand via `nodeIntent` action on `calibra-ai` Edge Function; persona-aware voice; cached per session |
+| 8 | **Profile data doesn't shape experience** — FAB co-pilot is tab-aware and persona-aware | 🔲 In progress | See locked spec below |
 | 9 | **No weekly rhythm** — no check-in cadence, no sense of time passing | 🔲 Pending | Weekly review moment, cadence nudge, time-aware briefing |
 | 10 | **Visual hierarchy doesn't guide attention** — everything equally weighted | 🔲 Pending | Pull the eye toward lowest-scoring or most-drifted node |
 
-### Orbital Slider (bonus — in progress)
-The linear slider across all coordinate inputs is being replaced with a circular orbital dial inspired by the Calibra solar mark logo. Sun at center (shows current value), planet handle orbits the arc. Implemented in `OrbitalSlider.tsx`. Currently live in the coordinate edit modal and score reflection prompt. Card-level expand-on-press interaction planned next.
+### Item 8 — FAB Co-pilot: Locked Spec
+
+**Three tab-aware cards, all persona-adaptive.**
+
+#### AI actions (Edge Function)
+
+| Action | Tab | Input | Output |
+|---|---|---|---|
+| `briefing` | Atlas | all nodes + persona | `{ stats, lines[2], actions[2] }` |
+| `nodeDiagnostic` | Nodes | all nodes + persona | `{ lines[3], actions[2] }` |
+| `taskDispatch` | Tasks | all nodes + tasks + persona | `{ tasks[3], actions[2] }` |
+
+#### Visual language
+
+| | Atlas | Nodes | Tasks |
+|---|---|---|---|
+| Accent | `#38bdf8` blue | `#a78bfa` purple | `#34d399` green |
+| Icon | Globe | Network | Grid |
+| Card background | `#0f172a` | `#0f172a` | `#0f172a` |
+| Body | Stats row + 2 insight lines | 3 diagnostic lines | Ranked task list (top 3) |
+| Actions | 2 tappable | 2 tappable | 2 tappable |
+
+#### Persona headers
+
+| | Engineer | Spiritual | Seeker |
+|---|---|---|---|
+| Atlas | "System Status" | "Your Balance" | "What's Alive" |
+| Nodes | "Diagnostic" | "Where Energy Lives" | "What's Calling" |
+| Tasks | "Dispatch" | "What Needs Tending" | "What's Next" |
+
+#### Persona voice
+- **Engineer** — precise, systems-oriented; prefixes like "→ Pattern", "→ Leverage"; actions like "Calibrate X"
+- **Spiritual** — reflective, holistic; prefixes like "→ Pattern", "→ Invitation"; actions like "Tend to X"
+- **Seeker** — curious, exploratory; prefixes like "→ Pattern", "→ Curiosity"; actions like "Explore X"
+
+### Orbital Slider (bonus — complete)
+The linear slider across all coordinate inputs is replaced with a circular orbital dial inspired by the Calibra solar mark logo. Sun at center (shows current value), planet handle orbits the arc. Implemented in `OrbitalSlider.tsx`. Live in the coordinate edit modal.
 
 ---
 

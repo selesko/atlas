@@ -161,7 +161,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                   onPanResponderGrant: applySlider,
                   onPanResponderMove: applySlider,
                 });
-                const hasEvidence = !!goal.evidence?.trim();
+                const hasCalibrations = goal.actions.length > 0;
                 // Intensity: white at low values → node color at high values
                 const intensity = goal.value / 10;
                 const valueColor = lerpColor('#ffffff', node.color, intensity);
@@ -179,10 +179,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                       },
                     ]}
                   >
-                    {/* Title row: name + evidence dot */}
+                    {/* Title row: name + calibrations dot */}
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
-                        <View style={[styles.evidenceDot, { backgroundColor: hasEvidence ? node.color : '#f59e0b' }]} />
+                        <View style={[styles.evidenceDot, { backgroundColor: hasCalibrations ? node.color : '#f59e0b' }]} />
                         <Text style={styles.goalName}>{goal.name}</Text>
                       </View>
                     </View>
@@ -196,7 +196,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                       >
                         <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.15 }]} />
                         <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: valueColor }]} />
-                        <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
+                        <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6, borderColor: valueColor, shadowColor: valueColor }]}>
                           <View style={[styles.sliderHandleInner, { backgroundColor: valueColor }]} />
                         </View>
                       </View>
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   sliderTrack: { flex: 1, height: 24, justifyContent: 'center' },
   sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' },
   sliderFill: { position: 'absolute', left: 0, top: 11, height: 2, opacity: 0.6 },
-  sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, borderColor: '#38BDF8', top: 6, justifyContent: 'center', alignItems: 'center', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 },
+  sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, top: 6, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 },
   sliderHandleInner: { width: 6, height: 6, borderRadius: 3 },
   valueCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
   valueCircleText: { fontSize: 22, fontWeight: '200' },

@@ -10,10 +10,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './lib/supabase';
 import { useAppStore } from './src/stores/useAppStore';
 import { FadingBorder } from './src/components/FadingBorder';
+import { CopilotCard, LastCycleData } from './src/components/CopilotCard';
+import { fetchCopilot, CopilotPayload, CopilotAction, TAB_CONFIG } from './src/services/aiService';
 import { THEME, NODE_COLORS, INFO_TEXTS, PERSONA_SUBTITLES } from './src/constants/theme';
 import { AtlasScreen } from './src/screens/AtlasScreen';
 import { NodesScreen } from './src/screens/NodesScreen';
-import { TasksScreen } from './src/screens/TasksScreen';
+import { ActionsScreen } from './src/screens/ActionsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { OrbitalValueBadge } from './src/components/OrbitalValueBadge';
@@ -21,7 +23,6 @@ import { OrbitalValueBadge } from './src/components/OrbitalValueBadge';
 const ONBOARDING_KEY = 'calibra_onboarding_complete';
 const { width } = Dimensions.get('window');
 
-type CopilotSuggestion = { label: string; action: string; nodeId?: string; goalId?: string };
 
 export default function App() {
   // — navigation & selection state —
@@ -30,9 +31,9 @@ export default function App() {
 
   // — modal / overlay state —
   const [editingCoordinate, setEditingCoordinate] = useState<{ nodeId: string; goalId: string } | null>(null);
-  const [addTaskOpen, setAddTaskOpen] = useState(false);
-  const [addTaskTarget, setAddTaskTarget] = useState<{ nodeId: string; goalId: string } | null>(null);
-  const [editingTask, setEditingTask] = useState<{ nodeId: string; goalId: string; taskId: string } | null>(null);
+  const [addActionOpen, setAddActionOpen] = useState(false);
+  const [addActionTarget, setAddActionTarget] = useState<{ nodeId: string; goalId: string } | null>(null);
+  const [editingAction, setEditingAction] = useState<{ nodeId: string; goalId: string; actionId: string } | null>(null);
   const [editForm, setEditForm] = useState({ title: '', nodeId: '', goalId: '', isPriority: false, notes: '', dueDate: '', reminder: '' });
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [addNodeForm, setAddNodeForm] = useState({ name: '', description: '', color: NODE_COLORS[0] });
@@ -45,21 +46,11 @@ export default function App() {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotTransition, setCopilotTransition] = useState(false);
 
-  // — AI briefing state (null = not fetched, 'loading' = in-flight, object = ready) —
-  type AiBriefing = { briefingLines: { prefix: string; text: string }[]; suggest1: CopilotSuggestion; suggest2: CopilotSuggestion };
-  const [aiBriefing, setAiBriefing] = useState<null | 'loading' | AiBriefing>(null);
+  // — AI copilot state (null = not fetched, 'loading' = in-flight, object = ready) —
+  const [aiCopilot, setAiCopilot] = useState<null | 'loading' | CopilotPayload>(null);
 
-  // — last cycle tracking — snapshot taken when user acts on a suggestion —
-  type LastCycleAction = {
-    action: string;
-    nodeId: string;
-    goalId?: string;
-    goalName: string;
-    nodeName: string;
-    valueBefore: number;
-    nodeAvgBefore: number;
-  };
-  const [lastCycleAction, setLastCycleAction] = useState<LastCycleAction | null>(null);
+  // — last cycle tracking — snapshot taken when user acts on a copilot action —
+  const [lastCycleAction, setLastCycleAction] = useState<LastCycleData | null>(null);
   const [copilotOrbitAngle, setCopilotOrbitAngle] = useState(0);
   const copilotOrbitAnim = useRef(new Animated.Value(0)).current;
   const copilotSunburstAnim = useRef(new Animated.Value(0)).current;
@@ -84,8 +75,8 @@ export default function App() {
   const {
     nodes, hasAccess, session,
     cognitiveModel, persona,
-    updateValue, updateNode, addNode: storeAddNode, saveTaskEdit,
-    toggleTask, getNodeAvg,
+    updateValue, updateNode, addNode: storeAddNode, saveActionEdit,
+    toggleAction, getNodeAvg,
     setSession, loadUserData,
     setCognitiveModel,
   } = useAppStore();
@@ -175,118 +166,126 @@ export default function App() {
     });
   }, [hasAccess]);
 
-  // — AI briefing fetch — fires when copilot opens while signed in —
+  // — AI copilot fetch — fires when copilot opens or tab changes while open —
   useEffect(() => {
-    if (!copilotOpen || !session) { setAiBriefing(null); return; }
-    setAiBriefing('loading');
-    supabase.functions.invoke('calibra-ai', {
-      body: { nodes, cognitiveModel },
-    }).then(({ data, error }) => {
-      if (error || !data?.briefingLines) { setAiBriefing(null); return; }
-      setAiBriefing(data as AiBriefing);
-    }).catch(() => setAiBriefing(null));
-  }, [copilotOpen, session]);
+    if (!copilotOpen || !session) { setAiCopilot(null); return; }
+    setAiCopilot('loading');
+    fetchCopilot(activeTab, nodes, persona, cognitiveModel)
+      .then(payload => setAiCopilot(payload))
+      .catch(() => setAiCopilot(null));
+  }, [copilotOpen, session, activeTab]);
 
-  // — copilot content —
-  const copilotContent = useMemo(() => {
-    const getAvg = (node: typeof nodes[0]) => node.goals.reduce((acc, g) => acc + g.value, 0) / (node.goals.length || 1);
-    const getAvgStr = (node: typeof nodes[0]) => getAvg(node).toFixed(1);
-    type Action = 'calibrate' | 'logEvidence' | 'prioritize' | 'deployTask';
-    type Line = { prefix: string; text: string };
-    let briefingLines: Line[] = [];
-    let suggest1: CopilotSuggestion = { label: `Your ${(nodes[0]?.name || 'node').toUpperCase()} node requires review; calibrate its coordinates.`, action: 'calibrate', nodeId: nodes[0]?.id };
-    let suggest2: CopilotSuggestion = { label: `Your ${(nodes[0]?.goals?.[0]?.name || 'coordinate').toUpperCase()} coordinate needs evidence; log it to strengthen alignment.`, action: 'logEvidence', nodeId: nodes[0]?.id, goalId: nodes[0]?.goals[0]?.id };
+  // — copilot fallback — rule-based payload when AI is unavailable —
+  const copilotFallback = useMemo((): CopilotPayload => {
+    const getAvg = (n: typeof nodes[0]) => n.goals.reduce((acc, g) => acc + g.value, 0) / (n.goals.length || 1);
+    const withAvg = nodes.map(n => ({ node: n, avg: getAvg(n) })).sort((a, b) => b.avg - a.avg);
+    const highest = withAvg[0];
+    const lowest = withAvg[withAvg.length - 1];
 
-    if (activeTab === 'Atlas' || activeTab === 'Nodes' || activeTab === 'Profile') {
-      const withAvg = nodes.map(n => ({ node: n, avg: getAvg(n) })).sort((a, b) => b.avg - a.avg);
-      const highest = withAvg[0];
-      const lowest = withAvg[withAvg.length - 1];
-      const delta = highest && lowest && highest.node.id !== lowest.node.id ? (highest.avg - lowest.avg).toFixed(1) : '0';
-      if (activeTab === 'Nodes') {
-        const needsCal = nodes.flatMap(n => n.goals.filter(g => g.value < 6).map(g => ({ n, g, v: g.value })));
-        const needEvidence = nodes.flatMap(n => n.goals.filter(g => !g.evidence?.trim()).map(g => ({ n, g })));
-        if (needsCal.length) briefingLines.push({ prefix: '> STATUS:', text: `${needsCal.length} COORDINATE(S) BELOW 6 — ${needsCal.map(c => `${c.g.name.toUpperCase()} (${c.n.name.toUpperCase()}): ${c.v}`).join('; ')}.` });
-        if (needEvidence.length) briefingLines.push({ prefix: '> EVIDENCE REQUIRED:', text: `${needEvidence.length} COORDINATE(S) LACK EVIDENCE — ${needEvidence.slice(0, 3).map(e => `${e.g.name.toUpperCase()} (${e.n.name.toUpperCase()})`).join('; ')}.` });
-        if (briefingLines.length === 0) briefingLines = [{ prefix: '> STATUS:', text: 'ALL COORDINATES CALIBRATED. ALL EVIDENCE LOGGED.' }];
-      } else if (activeTab === 'Profile') {
-        briefingLines = [{ prefix: '> STATUS:', text: `${cognitiveModel.toUpperCase()} ARCHETYPE. PROFILE LOADED.` }];
-      } else {
-        if (highest && lowest && delta !== '0') {
-          briefingLines = [
-            { prefix: '> STATUS:', text: `THE ATLAS IS WEIGHTED TOWARD ${highest.node.name.toUpperCase()} (${getAvgStr(highest.node)}).` },
-            { prefix: '> ALERT:', text: `${lowest.node.name.toUpperCase()} (${getAvgStr(lowest.node)}) TRAILING BY ${delta} POINTS, STRUCTURAL DRIFT.` },
-          ];
-        } else if (withAvg.length) {
-          briefingLines = [{ prefix: '> STATUS:', text: `THE ATLAS SHOWS UNIFORM WEIGHTS. ${withAvg[0].node.name.toUpperCase()} LEADS AT ${getAvgStr(withAvg[0].node)}.` }];
-        } else {
-          briefingLines = [{ prefix: '> STATUS:', text: 'NO NODES DEFINED. ADD NODES TO BUILD THE ATLAS.' }];
-        }
-      }
-      suggest1 = { label: `Your ${(lowest?.node?.name || 'node').toUpperCase()} node requires review; calibrate its coordinates.`, action: 'calibrate', nodeId: lowest?.node.id };
-      const goalForEvidence = highest?.node.goals.find(g => !g.evidence?.trim()) || highest?.node.goals[0];
-      suggest2 = { label: `Your ${(goalForEvidence?.name || 'coordinate').toUpperCase()} coordinate in ${(highest?.node?.name || 'node').toUpperCase()} needs evidence; log it to strengthen alignment.`, action: 'logEvidence', nodeId: highest?.node.id, goalId: goalForEvidence?.id };
-    } else if (activeTab === 'Tasks') {
-      const allTasks = nodes.flatMap(n => n.goals.flatMap(g => g.tasks.map(t => ({ ...t, nodeId: n.id, goalId: g.id, goalName: g.name }))));
-      const completed = allTasks.filter(t => t.completed).length;
-      const pending = allTasks.filter(t => !t.completed).length;
-      const byCoord: Record<string, { nodeId: string; goalId: string; goalName: string; pending: number }> = {};
-      nodes.forEach(n => n.goals.forEach(g => {
-        const p = g.tasks.filter(t => !t.completed).length;
-        if (p > 0) { const k = `${n.id}-${g.id}`; if (!byCoord[k] || p > byCoord[k].pending) byCoord[k] = { nodeId: n.id, goalId: g.id, goalName: g.name, pending: p }; }
-      }));
-      const topCoord = Object.values(byCoord).sort((a, b) => b.pending - a.pending)[0];
-      const needsNode = nodes.map(n => ({ node: n, avg: n.goals.reduce((acc, g) => acc + g.value, 0) / (n.goals.length || 1) })).sort((a, b) => a.avg - b.avg)[0]?.node;
-      briefingLines = [
-        { prefix: '> STATUS:', text: `DAILY VELOCITY — ${completed} COMPLETED, ${pending} PENDING.` },
-        { prefix: topCoord ? '> ALERT:' : '> STATUS:', text: topCoord ? `${topCoord.goalName.toUpperCase()} HAS HIGHEST PENDING LOAD (${topCoord.pending} TASK${topCoord.pending !== 1 ? 'S' : ''}).` : 'NO PENDING TASK.' },
-      ];
-      suggest1 = { label: `Your ${(topCoord?.goalName || 'coordinate').toUpperCase()} coordinate has pending work; prioritize and plan.`, action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId };
-      suggest2 = { label: `Your ${(needsNode?.name || 'mind').toUpperCase()} node could use a new task; deploy one to build momentum.`, action: 'deployTask', nodeId: needsNode?.id, goalId: needsNode?.goals[0]?.id };
+    if (activeTab === 'Actions') {
+      const allActions = nodes.flatMap(n => n.goals.flatMap(g => g.actions.map(a => ({ ...a, nodeId: n.id, goalId: g.id, goalName: g.name }))));
+      const completed = allActions.filter(a => a.completed).length;
+      const pending = allActions.filter(a => !a.completed).length;
+      const topCoord = nodes.flatMap(n => n.goals.map(g => ({ nodeId: n.id, goalId: g.id, goalName: g.name, pending: g.actions.filter(a => !a.completed).length }))).sort((a, b) => b.pending - a.pending)[0];
+      const lowestNode = lowest?.node;
+      const tasksHealthy = pending === 0 && completed > 0;
+      return {
+        header: 'TASK DISPATCH',
+        stats: [{ label: 'COMPLETED', value: String(completed) }, { label: 'PENDING', value: String(pending) }],
+        lines: tasksHealthy ? [
+          { prefix: '> VELOCITY:', text: 'BACKLOG CLEAR — STRONG COMPLETION RATE.' },
+          { prefix: '> DISPATCH:', text: 'MOMENTUM IS BUILDING. DEPLOY YOUR NEXT ACTION.' },
+        ] : [
+          { prefix: '> VELOCITY:', text: `${completed} COMPLETED, ${pending} PENDING.` },
+          { prefix: '> DISPATCH:', text: topCoord?.pending ? `${topCoord.goalName.toUpperCase()} HAS ${topCoord.pending} PENDING ACTION${topCoord.pending !== 1 ? 'S' : ''}.` : 'NO PENDING ACTIONS.' },
+        ],
+        actions: tasksHealthy ? [
+          { label: `Keep the momentum going in ${highest?.node?.name ?? 'your top node'}.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+          { label: `Add a new action to ${lowestNode?.name ?? 'your lowest node'}.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
+        ] : [
+          { label: `Prioritize ${topCoord?.goalName ?? 'your top coordinate'} work.`, action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId },
+          { label: `Deploy a new action to ${lowestNode?.name ?? 'your lowest node'}.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
+        ],
+      };
     }
-    return { briefingLines, suggest1, suggest2 };
+
+    if (activeTab === 'Nodes') {
+      const belowThreshold = nodes.flatMap(n => n.goals.filter(g => g.value < 6));
+      const noCalibrations = nodes.flatMap(n => n.goals.filter(g => g.actions.length === 0));
+      const nodesHealthy = belowThreshold.length === 0 && noCalibrations.length === 0;
+      return {
+        header: 'NODE DIAGNOSTIC',
+        stats: [{ label: 'BELOW 6', value: String(belowThreshold.length) }, { label: 'NO ACTIONS', value: String(noCalibrations.length) }],
+        lines: nodesHealthy ? [
+          { prefix: '> SCAN:', text: 'ALL COORDINATES ABOVE THRESHOLD — SYSTEM HOLDING STRONG.' },
+          { prefix: '> SIGNAL:', text: 'ACTIONS ARE IN PLACE. FOCUS ON DEEPENING WHAT\'S WORKING.' },
+        ] : [
+          { prefix: '> SCAN:', text: belowThreshold.length ? `${belowThreshold.length} COORDINATE${belowThreshold.length !== 1 ? 'S' : ''} BELOW THRESHOLD.` : 'ALL COORDINATES ABOVE THRESHOLD.' },
+          { prefix: '> SIGNAL:', text: noCalibrations.length ? `${noCalibrations.length} COORDINATE${noCalibrations.length !== 1 ? 'S' : ''} HAVE NO ACTIONS.` : 'ALL COORDINATES HAVE ACTIONS.' },
+        ],
+        actions: nodesHealthy ? [
+          { label: `Push your strongest node ${highest?.node?.name ?? ''} even further.`, action: 'calibrate', nodeId: highest?.node?.id },
+          { label: `Add an action to deepen ${highest?.node?.goals[0]?.name ?? 'your top coordinate'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+        ] : [
+          { label: `Calibrate ${lowest?.node?.name ?? 'your lowest node'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
+          { label: `Add an action to ${noCalibrations[0]?.name ?? 'a coordinate'}.`, action: 'addCalibration', nodeId: nodes.find(n => n.goals.some(g => g.actions.length === 0))?.id, goalId: noCalibrations[0]?.id },
+        ],
+      };
+    }
+
+    // Atlas + Profile
+    const totalAvg = withAvg.length ? (withAvg.reduce((acc, w) => acc + w.avg, 0) / withAvg.length).toFixed(1) : '0.0';
+    const allAbove = withAvg.every(w => w.avg >= 6);
+    const atlasHealthy = parseFloat(totalAvg) >= 7.5 && allAbove;
+    return {
+      header: 'SYSTEM STATUS',
+      stats: [{ label: 'ATLAS AVG', value: totalAvg }, { label: 'NODES', value: String(nodes.length) }],
+      lines: atlasHealthy ? [
+        { prefix: '> STATUS:', text: `ATLAS HOLDING AT ${totalAvg} — ALL NODES ABOVE THRESHOLD.` },
+        { prefix: '> FOCUS:', text: 'SYSTEM IS STABLE. SUSTAIN THE CALIBRATION.' },
+      ] : highest ? [
+        { prefix: '> STATUS:', text: `ATLAS WEIGHTED TOWARD ${highest.node.name.toUpperCase()} (${highest.avg.toFixed(1)}).` },
+        { prefix: '> FOCUS:', text: lowest && lowest.node.id !== highest.node.id ? `${lowest.node.name.toUpperCase()} TRAILING AT ${lowest.avg.toFixed(1)} — STRUCTURAL DRIFT.` : 'BALANCED ACROSS ALL NODES.' },
+      ] : [
+        { prefix: '> STATUS:', text: 'NO NODES DEFINED YET.' },
+        { prefix: '> FOCUS:', text: 'ADD NODES TO BUILD YOUR ATLAS.' },
+      ],
+      actions: atlasHealthy ? [
+        { label: `Keep ${highest?.node?.name ?? 'your top node'} calibrated.`, action: 'calibrate', nodeId: highest?.node?.id },
+        { label: `Add an action to deepen ${highest?.node?.goals[0]?.name ?? 'your top coordinate'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+      ] : [
+        { label: `Calibrate your ${lowest?.node?.name ?? 'lowest'} node.`, action: 'calibrate', nodeId: lowest?.node?.id },
+        { label: `Add an action in ${highest?.node?.name ?? 'your top node'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals.find(g => g.actions.length === 0)?.id ?? highest?.node?.goals[0]?.id },
+      ],
+    };
   }, [activeTab, nodes, cognitiveModel]);
 
-  // — briefing highlight —
-  const briefingHighlight = useMemo(() => {
-    const wordToColor: Record<string, string> = { EVIDENCE: '#22D3EE' };
-    const canon = (n: typeof nodes[0]) =>
-      n.id === 'mind' || n.name.toLowerCase() === 'mind' ? '#22D3EE' :
-      n.id === 'body' || n.name.toLowerCase() === 'body' ? '#FB7185' :
-      n.id === 'home' || n.name.toLowerCase() === 'home' ? '#A78BFA' : (n.color || THEME.border);
-    nodes.forEach(n => {
-      wordToColor[n.name.toUpperCase()] = canon(n);
-      n.goals.forEach(g => { wordToColor[g.name.toUpperCase()] = canon(n); });
-    });
-    const keywords = Object.keys(wordToColor).filter(Boolean).sort((a, b) => b.length - a.length);
-    const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const re = new RegExp(`(\\d+\\.?\\d*|${escaped.join('|')})`, 'gi');
-    return { wordToColor, re };
-  }, [nodes]);
+  // briefingHighlight removed — handled inside CopilotCard
 
-  // — suggestion handler —
-  const handleSuggestion = useCallback((s: CopilotSuggestion) => {
+  // — copilot action handler —
+  const handleCopilotAction = useCallback((act: CopilotAction) => {
     // Snapshot before-state for Last Cycle recap
-    const node = nodes.find(n => n.id === s.nodeId);
-    const goal = node?.goals.find(g => g.id === s.goalId);
+    const node = nodes.find(n => n.id === act.nodeId);
+    const goal = node?.goals.find(g => g.id === act.goalId);
     if (node) {
       setLastCycleAction({
-        action: s.action,
-        nodeId: s.nodeId || '',
-        goalId: s.goalId,
+        action: act.action,
         goalName: goal?.name || node.goals[0]?.name || '',
         nodeName: node.name,
         valueBefore: goal?.value ?? node.goals[0]?.value ?? 0,
         nodeAvgBefore: parseFloat(getNodeAvg(node)),
+        nodeAvgNow: parseFloat(getNodeAvg(node)), // will read live on next open
       });
     }
-    if (s.action === 'calibrate' && s.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(s.nodeId); }
-    else if (s.action === 'logEvidence' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-    else if (s.action === 'prioritize' && s.nodeId && s.goalId) { setEditingCoordinate({ nodeId: s.nodeId, goalId: s.goalId }); }
-    else if (s.action === 'deployTask') {
-      const { nodeId, goalId } = s.nodeId && s.goalId ? { nodeId: s.nodeId, goalId: s.goalId }
+    setCopilotOpen(false);
+    if (act.action === 'calibrate' && act.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(act.nodeId); }
+    else if (act.action === 'addCalibration' && act.nodeId && act.goalId) { setAddActionTarget({ nodeId: act.nodeId, goalId: act.goalId }); setAddActionOpen(true); }
+    else if (act.action === 'prioritize' && act.nodeId && act.goalId) { setEditingCoordinate({ nodeId: act.nodeId, goalId: act.goalId }); }
+    else if (act.action === 'deployTask') {
+      const { nodeId, goalId } = act.nodeId && act.goalId ? { nodeId: act.nodeId, goalId: act.goalId }
         : nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id }
         : { nodeId: '', goalId: '' };
-      if (nodeId && goalId) { setAddTaskTarget({ nodeId, goalId }); setAddTaskOpen(true); }
+      if (nodeId && goalId) { setAddActionTarget({ nodeId, goalId }); setAddActionOpen(true); }
     }
   }, [nodes, getNodeAvg]);
 
@@ -383,9 +382,8 @@ export default function App() {
           {/* Screens */}
           {activeTab === 'Atlas' && (
             <AtlasScreen
-              copilotContent={copilotContent}
-              briefingHighlight={briefingHighlight}
-              onHandleSuggestion={handleSuggestion}
+              guidanceActions={(aiCopilot && aiCopilot !== 'loading' ? aiCopilot : copilotFallback).actions}
+              onAction={handleCopilotAction}
             />
           )}
           {activeTab === 'Nodes' && (
@@ -398,20 +396,20 @@ export default function App() {
               onOpenSystemGate={() => setSystemAccessGateOpen(true)}
             />
           )}
-          {activeTab === 'Tasks' && (
-            <TasksScreen
-              addTaskOpen={addTaskOpen}
-              setAddTaskOpen={setAddTaskOpen}
-              addTaskTarget={addTaskTarget}
-              setAddTaskTarget={setAddTaskTarget}
+          {activeTab === 'Actions' && (
+            <ActionsScreen
+              addActionOpen={addActionOpen}
+              setAddActionOpen={setAddActionOpen}
+              addActionTarget={addActionTarget}
+              setAddActionTarget={setAddActionTarget}
               selectedNodeId={selectedNodeId}
-              onOpenEditTask={(nodeId, goalId, taskId) => {
+              onOpenEditAction={(nodeId, goalId, actionId) => {
                 const node = nodes.find(n => n.id === nodeId);
                 const goal = node?.goals.find(g => g.id === goalId);
-                const task = goal?.tasks.find(t => t.id === taskId);
-                if (task) {
-                  setEditForm({ title: task.title, nodeId, goalId, isPriority: !!task.isPriority, notes: task.notes || '', dueDate: task.dueDate || '', reminder: task.reminder || '' });
-                  setEditingTask({ nodeId, goalId, taskId });
+                const action = goal?.actions.find(a => a.id === actionId);
+                if (action) {
+                  setEditForm({ title: action.title, nodeId, goalId, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '' });
+                  setEditingAction({ nodeId, goalId, actionId });
                 }
               }}
               onOpenCoordEdit={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
@@ -430,7 +428,7 @@ export default function App() {
 
       {/* Tab bar */}
       <View style={styles.nav}>
-        {(['Atlas', 'Nodes', 'Tasks', 'Profile'] as const).map(t => {
+        {(['Atlas', 'Nodes', 'Actions', 'Profile'] as const).map(t => {
           const active = activeTab === t;
           const c = active ? THEME.accent : THEME.textDim;
           return (
@@ -451,7 +449,7 @@ export default function App() {
                     </G>
                   </Svg>
                 )}
-                {t === 'Tasks' && (
+                {t === 'Actions' && (
                   <Svg width={28} height={28} viewBox="0 0 32 32">
                     <Path fill={c} d="M10.293 5.293L7 8.586L5.707 7.293L4.293 8.707L7 11.414l4.707-4.707zM14 7v2h14V7zm0 8v2h14v-2zm0 8v2h14v-2z" />
                   </Svg>
@@ -581,7 +579,7 @@ export default function App() {
             <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
               <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
                 <Text style={styles.coordDetailName}>{goal.name}</Text>
-                <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the slider to evaluate yourself. Add calibrations below to keep you on your path.</Text>
+                <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the slider to score its integrity. Add actions below — things you do to keep this coordinate aligned.</Text>
                 <Text style={styles.reflectionQuestion}>HOW IS THE INTEGRITY OF THIS COORDINATE?</Text>
                 <View style={styles.sliderRow}>
                   <View style={styles.sliderTrack} onLayout={e => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
@@ -594,35 +592,35 @@ export default function App() {
                   <OrbitalValueBadge value={goal.value} color={node.color} size={48} />
                 </View>
                 <Text style={styles.calibrationFeedLabel}>CALIBRATIONS</Text>
-                {goal.tasks.length === 0 ? (
-                  <Text style={[styles.evidencePreview, { marginBottom: 8 }]}>No calibrations yet</Text>
+                {goal.actions.length === 0 ? (
+                  <Text style={[styles.evidencePreview, { marginBottom: 8 }]}>No actions yet</Text>
                 ) : (
-                  goal.tasks.map(t => (
+                  goal.actions.map(a => (
                     <TouchableOpacity
-                      key={t.id}
+                      key={a.id}
                       style={styles.coordEditTaskRow}
                       onPress={() => {
-                        setEditForm({ title: t.title, nodeId: node.id, goalId: goal.id, isPriority: !!t.isPriority, notes: t.notes || '', dueDate: t.dueDate || '', reminder: t.reminder || '' });
-                        setEditingTask({ nodeId: node.id, goalId: goal.id, taskId: t.id });
+                        setEditForm({ title: a.title, nodeId: node.id, goalId: goal.id, isPriority: !!a.isPriority, notes: a.notes || '', dueDate: a.dueDate || '', reminder: a.reminder || '' });
+                        setEditingAction({ nodeId: node.id, goalId: goal.id, actionId: a.id });
                         setEditingCoordinate(null);
                       }}
                       activeOpacity={0.8}
                     >
-                      <TouchableOpacity onPress={() => toggleTask(node.id, goal.id, t.id)} style={{ padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <TouchableOpacity onPress={() => toggleAction(node.id, goal.id, a.id)} style={{ padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Svg width={20} height={20} viewBox="0 0 24 24">
-                          {t.completed ? (
+                          {a.completed ? (
                             <><Circle cx="12" cy="12" r="10" fill={node.color} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
                           ) : (
                             <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth="1.5" />
                           )}
                         </Svg>
                       </TouchableOpacity>
-                      <Text style={[styles.coordEditTaskTitle, t.completed && styles.taskTitleStrike, t.completed && { opacity: 0.8 }]} numberOfLines={1}>{t.title}</Text>
+                      <Text style={[styles.coordEditTaskTitle, a.completed && styles.taskTitleStrike, a.completed && { opacity: 0.8 }]} numberOfLines={1}>{a.title}</Text>
                     </TouchableOpacity>
                   ))
                 )}
-                <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => useAppStore.getState().addTask(node.id, goal.id, 'New Task')} activeOpacity={0.7}>
-                  <Text style={styles.addCoordinateText}>+ ADD TASK</Text>
+                <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => useAppStore.getState().addAction(node.id, goal.id, 'New Action')} activeOpacity={0.7}>
+                  <Text style={styles.addCoordinateText}>+ ADD ACTION</Text>
                 </TouchableOpacity>
               </ScrollView>
               <TouchableOpacity style={[styles.coordEditDoneBtn, { alignSelf: 'flex-end', marginTop: 8 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
@@ -633,10 +631,10 @@ export default function App() {
         );
       })()}
 
-      {/* Edit task overlay */}
-      {!!editingTask && (
+      {/* Edit action overlay */}
+      {!!editingAction && (
         <View style={styles.infoOverlay} pointerEvents="box-none">
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingTask(null)} activeOpacity={1} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingAction(null)} activeOpacity={1} />
           <View style={styles.taskEditCard} pointerEvents="auto">
             <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.editFormLabel}>TITLE</Text>
@@ -683,10 +681,10 @@ export default function App() {
               <TextInput style={styles.evidenceInput} value={editForm.reminder} onChangeText={t => setEditForm(f => ({ ...f, reminder: t }))} placeholder="e.g. 9:00 AM" placeholderTextColor={THEME.textDim} />
             </ScrollView>
             <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingTask(null)} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingAction(null)} activeOpacity={0.7}>
                 <Text style={styles.cancelBtnText}>CANCEL</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={() => { saveTaskEdit(editingTask, editForm); setEditingTask(null); }} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.submitBtn} onPress={() => { saveActionEdit(editingAction, editForm); setEditingAction(null); }} activeOpacity={0.7}>
                 <Text style={styles.submitBtnText}>DONE</Text>
               </TouchableOpacity>
             </View>
@@ -786,82 +784,24 @@ export default function App() {
         <View style={styles.copilotOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCopilotOpen(false)} activeOpacity={1} />
           <FadingBorder style={{ maxWidth: 400, width: '100%' }}>
-            {(() => {
-              const displayContent = (aiBriefing && aiBriefing !== 'loading') ? aiBriefing : copilotContent;
-              const isLoading = aiBriefing === 'loading';
-              return (
-                <View style={styles.copilotCard} pointerEvents="auto">
-                  <View style={styles.copilotCardHeader}>
-                    <Text style={styles.copilotTitle}>CO-PILOT // V1.0</Text>
-                    <TouchableOpacity onPress={() => setCopilotOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-                      <Text style={styles.copilotCloseX}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {/* Last Cycle recap */}
-                  {lastCycleAction && (() => {
-                    const lcNode = nodes.find(n => n.id === lastCycleAction.nodeId);
-                    const lcGoal = lcNode?.goals.find(g => g.id === lastCycleAction.goalId);
-                    const nodeAvgNow = lcNode ? parseFloat(getNodeAvg(lcNode)) : lastCycleAction.nodeAvgBefore;
-                    const delta = nodeAvgNow - lastCycleAction.nodeAvgBefore;
-                    const improving = delta > 0.05;
-                    const declining = delta < -0.05;
-                    const deltaColor = improving ? '#4ade80' : declining ? '#fb7185' : THEME.textDim;
-                    const actionLabel: Record<string, string> = {
-                      calibrate: 'CALIBRATED', logEvidence: 'EVIDENCE LOGGED',
-                      prioritize: 'REVIEWED', deployTask: 'TASK DEPLOYED',
-                    };
-                    const valueChanged = lcGoal && lastCycleAction.action === 'calibrate' && lcGoal.value !== lastCycleAction.valueBefore;
-                    return (
-                      <>
-                        <Text style={[styles.copilotHeading, { marginTop: 0 }]}>LAST CYCLE</Text>
-                        <View style={styles.copilotLastCycleCard}>
-                          <Text style={styles.copilotLastCycleAction}>
-                            {actionLabel[lastCycleAction.action] || 'ACTIONED'} · {lastCycleAction.goalName.toUpperCase()} ({lastCycleAction.nodeName.toUpperCase()})
-                          </Text>
-                          {valueChanged && lcGoal && (
-                            <Text style={styles.copilotLastCycleDetail}>
-                              {lastCycleAction.valueBefore} → {lcGoal.value}
-                            </Text>
-                          )}
-                          <Text style={[styles.copilotLastCycleDelta, { color: deltaColor }]}>
-                            NODE AVG {delta >= 0 ? '+' : ''}{delta.toFixed(1)} · {improving ? 'MOMENTUM IMPROVING' : declining ? 'NEEDS ATTENTION' : 'STABLE'}
-                          </Text>
-                        </View>
-                      </>
-                    );
-                  })()}
-                  <Text style={[styles.copilotHeading, { marginTop: lastCycleAction ? 12 : 0 }]}>
-                    {isLoading ? 'BRIEFING  ···' : 'BRIEFING'}
-                  </Text>
-                  {displayContent.briefingLines.map((line, lineIdx) => {
-                    const parts = line.text.split(briefingHighlight.re).filter(Boolean);
-                    return (
-                      <View key={lineIdx} style={[styles.copilotBriefingLine, isLoading && { opacity: 0.4 }]}>
-                        <Text style={styles.copilotBriefingPrefix}>{line.prefix} </Text>
-                        <Text style={styles.copilotBriefingBody}>
-                          {parts.map((part, i) => {
-                            if (/^\d+\.?\d*$/.test(part)) return <Text key={i} style={styles.copilotBriefingNum}>{part}</Text>;
-                            const col = briefingHighlight.wordToColor[part.toUpperCase()];
-                            return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
-                          })}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                  <Text style={styles.copilotHeading}>SUGGESTIONS</Text>
-                  {[displayContent.suggest1, displayContent.suggest2].map((sug, idx) => (
-                    <TouchableOpacity key={idx} style={[styles.copilotSuggestionBtn, isLoading && { opacity: 0.4 }]} onPress={() => { if (!isLoading) { setCopilotOpen(false); handleSuggestion(sug); } }} activeOpacity={0.8}>
-                      <Text style={styles.copilotSuggestionBtnText}>
-                        {sug.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
-                          const col = briefingHighlight.wordToColor[part.toUpperCase()];
-                          return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
-                        })}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              );
-            })()}
+            <View pointerEvents="auto">
+            <CopilotCard
+              tab={activeTab}
+              tabConfig={TAB_CONFIG[activeTab] ?? TAB_CONFIG['Atlas']}
+              payload={aiCopilot === 'loading' ? null : (aiCopilot ?? copilotFallback)}
+              isLoading={aiCopilot === 'loading'}
+              onClose={() => setCopilotOpen(false)}
+              onAction={handleCopilotAction}
+              persona={persona}
+              lastCycle={lastCycleAction ? {
+                ...lastCycleAction,
+                nodeAvgNow: (() => {
+                  const lcNode = nodes.find(n => n.name === lastCycleAction.nodeName);
+                  return lcNode ? parseFloat(getNodeAvg(lcNode)) : lastCycleAction.nodeAvgBefore;
+                })(),
+              } : null}
+            />
+            </View>
           </FadingBorder>
         </View>
       </Modal>
@@ -1001,7 +941,7 @@ const styles = StyleSheet.create({
   taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
   taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 },
   taskEditNotes: { color: THEME.border, fontSize: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
-  addTaskCoordChip: { paddingVertical: 8, paddingHorizontal: 12, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 4 },
+  addTaskCoordChip: { paddingVertical: 6, paddingHorizontal: 14, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
   addTaskCoordChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' },
   taskTitleStrike: { textDecorationLine: 'line-through' },
 

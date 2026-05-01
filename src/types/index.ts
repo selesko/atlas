@@ -1,4 +1,4 @@
-export interface Task {
+export interface Action {
   id: string;
   title: string;
   completed: boolean;
@@ -15,8 +15,7 @@ export interface Goal {
   id: string;
   name: string;
   value: number;
-  evidence: string;
-  tasks: Task[];
+  actions: Action[];
   scoreHistory?: Array<{ date: string; value: number }>;
 }
 
@@ -25,6 +24,7 @@ export interface Node {
   name: string;
   color: string;
   description: string;
+  why?: string;
   goals: Goal[];
 }
 
@@ -32,7 +32,7 @@ export type CognitiveModel = 'Architect' | 'Strategist' | 'Builder' | 'Analyst';
 export type PeakPeriod = 'MORNING' | 'EVENING';
 export type Persona = 'Engineer' | 'Seeker' | 'Spiritual';
 export type AtlasGraphView = 'radar' | 'trajectory' | 'constellation';
-export type TaskFilter = 'ALL' | 'MIND' | 'BODY' | 'HOME' | 'FOCUS';
+export type ActionFilter = 'ALL' | 'MIND' | 'BODY' | 'HOME' | 'FOCUS';
 export type MotivatorChoice = 'left' | 'right';
 export type MotivatorChoices = Record<string, MotivatorChoice>;
 

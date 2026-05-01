@@ -6,7 +6,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
-import { Node, Goal, Task, CognitiveModel, MotivatorChoices } from '../types';
+import { Node, Goal, Action, CognitiveModel, MotivatorChoices, Persona } from '../types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,8 @@ export interface ProfilePayload {
   cognitiveModel: CognitiveModel;
   motivatorChoices: MotivatorChoices;
   identityNotes: string;
+  persona: Persona;
+  hasCompletedOnboarding: boolean;
 }
 
 export async function upsertProfile(
@@ -33,6 +35,8 @@ export async function upsertProfile(
       cognitive_model: payload.cognitiveModel,
       motivators: payload.motivatorChoices,
       identity_notes: payload.identityNotes,
+      persona: payload.persona,
+      has_completed_onboarding: payload.hasCompletedOnboarding,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' }
@@ -53,6 +57,7 @@ export async function upsertNode(
       user_id: userId,
       name: node.name,
       description: node.description,
+      why: node.why ?? '',
       color: node.color,
       sort_order: sortOrder,
       updated_at: new Date().toISOString(),
@@ -86,7 +91,6 @@ export async function upsertCoordinate(
       node_id: nodeId,
       name: goal.name,
       value: goal.value,
-      evidence: goal.evidence,
       score_history: goal.scoreHistory ?? [],
       sort_order: sortOrder,
       updated_at: new Date().toISOString(),
@@ -108,46 +112,46 @@ export async function deleteCoordinate(
   if (error) swallow('deleteCoordinate', error);
 }
 
-// ─── Tasks ──────────────────────────────────────────────────────────────────
+// ─── Actions ─────────────────────────────────────────────────────────────────
 
-export async function upsertTask(
+export async function upsertAction(
   userId: string,
   nodeId: string,
   goalId: string,
-  task: Task
+  action: Action
 ): Promise<void> {
   const { error } = await supabase.from('tasks').upsert(
     {
-      id: task.id,
+      id: action.id,
       user_id: userId,
       node_id: nodeId,
       goal_id: goalId,
-      title: task.title,
-      completed: task.completed,
-      is_priority: task.isPriority,
-      notes: task.notes ?? '',
-      due_date: task.dueDate ?? '',
-      reminder: task.reminder ?? '',
-      created_at: task.createdAt,
-      completed_at: task.completedAt ?? '',
-      timestamp: task.timestamp,
+      title: action.title,
+      completed: action.completed,
+      is_priority: action.isPriority,
+      notes: action.notes ?? '',
+      due_date: action.dueDate ?? '',
+      reminder: action.reminder ?? '',
+      created_at: action.createdAt,
+      completed_at: action.completedAt ?? '',
+      timestamp: action.timestamp,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'id,user_id' }
   );
-  if (error) swallow('upsertTask', error);
+  if (error) swallow('upsertAction', error);
 }
 
-export async function deleteTask(
+export async function deleteAction(
   userId: string,
-  taskId: string
+  actionId: string
 ): Promise<void> {
   const { error } = await supabase
     .from('tasks')
     .delete()
-    .eq('id', taskId)
+    .eq('id', actionId)
     .eq('user_id', userId);
-  if (error) swallow('deleteTask', error);
+  if (error) swallow('deleteAction', error);
 }
 
 // ─── Full fetch (on sign-in) ─────────────────────────────────────────────────
@@ -159,7 +163,7 @@ export interface UserData {
 
 export async function fetchUserData(userId: string): Promise<UserData> {
   // Fetch all tables in parallel
-  const [profileRes, nodesRes, coordsRes, tasksRes] = await Promise.all([
+  const [profileRes, nodesRes, coordsRes, actionsRes] = await Promise.all([
     supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('nodes').select('*').eq('user_id', userId).order('sort_order'),
     supabase
@@ -173,50 +177,50 @@ export async function fetchUserData(userId: string): Promise<UserData> {
   if (profileRes.error) swallow('fetchProfile', profileRes.error);
   if (nodesRes.error) swallow('fetchNodes', nodesRes.error);
   if (coordsRes.error) swallow('fetchCoords', coordsRes.error);
-  if (tasksRes.error) swallow('fetchTasks', tasksRes.error);
+  if (actionsRes.error) swallow('fetchActions', actionsRes.error);
 
   const rawProfile = profileRes.data;
   const rawNodes: any[] = nodesRes.data ?? [];
   const rawCoords: any[] = coordsRes.data ?? [];
-  const rawTasks: any[] = tasksRes.data ?? [];
+  const rawActions: any[] = actionsRes.data ?? [];
 
   // No remote data at all — new user, keep local state
   if (!rawProfile && rawNodes.length === 0) {
     return { profile: null, nodes: [] };
   }
 
-  // Assemble nodes → goals → tasks
+  // Assemble nodes → coordinates → actions
   const nodes: Node[] = rawNodes.map((n) => {
     const goals: Goal[] = rawCoords
       .filter((c) => c.node_id === n.id)
       .map((c) => {
-        const tasks: Task[] = rawTasks
-          .filter((t) => t.goal_id === c.id)
-          .map((t) => ({
-            id: t.id,
-            title: t.title,
-            completed: t.completed,
-            isPriority: t.is_priority,
-            timestamp: t.timestamp,
-            notes: t.notes,
-            dueDate: t.due_date,
-            reminder: t.reminder,
-            createdAt: t.created_at,
-            completedAt: t.completed_at || undefined,
+        const actions: Action[] = rawActions
+          .filter((a) => a.goal_id === c.id)
+          .map((a) => ({
+            id: a.id,
+            title: a.title,
+            completed: a.completed,
+            isPriority: a.is_priority,
+            timestamp: a.timestamp,
+            notes: a.notes,
+            dueDate: a.due_date,
+            reminder: a.reminder,
+            createdAt: a.created_at,
+            completedAt: a.completed_at || undefined,
           }));
         return {
           id: c.id,
           name: c.name,
           value: Number(c.value),
-          evidence: c.evidence,
           scoreHistory: c.score_history ?? [],
-          tasks,
+          actions,
         };
       });
     return {
       id: n.id,
       name: n.name,
       description: n.description,
+      why: n.why ?? '',
       color: n.color,
       goals,
     };
@@ -227,6 +231,8 @@ export async function fetchUserData(userId: string): Promise<UserData> {
         cognitiveModel: rawProfile.cognitive_model as CognitiveModel,
         motivatorChoices: (rawProfile.motivators as MotivatorChoices) ?? {},
         identityNotes: rawProfile.identity_notes ?? '',
+        persona: (rawProfile.persona as Persona) ?? 'Seeker',
+        hasCompletedOnboarding: rawProfile.has_completed_onboarding ?? false,
       }
     : null;
 
@@ -247,8 +253,8 @@ export async function pushLocalData(
     for (let gi = 0; gi < node.goals.length; gi++) {
       const goal = node.goals[gi];
       await upsertCoordinate(userId, node.id, goal, gi);
-      for (const task of goal.tasks) {
-        await upsertTask(userId, node.id, goal.id, task);
+      for (const action of goal.actions) {
+        await upsertAction(userId, node.id, goal.id, action);
       }
     }
   }

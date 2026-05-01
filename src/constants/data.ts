@@ -32,9 +32,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'm1',
         name: 'Meditation',
         value: 7,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(7, 7),
-        tasks: [
+        actions: [
           {
             id: 't1',
             title: '10m Focus Session',
@@ -50,9 +50,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'm2',
         name: 'Deep Work',
         value: 5,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(5, 7),
-        tasks: [],
+        actions: [],
       },
     ],
   },
@@ -66,9 +66,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'b1',
         name: 'Hydration',
         value: 9,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(9, 7),
-        tasks: [
+        actions: [
           {
             id: 't2',
             title: '3L Water',
@@ -83,9 +83,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'b2',
         name: 'Sleep Quality',
         value: 6,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(6, 7),
-        tasks: [],
+        actions: [],
       },
     ],
   },
@@ -99,9 +99,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'h1',
         name: 'Organization',
         value: 8,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(8, 7),
-        tasks: [
+        actions: [
           {
             id: 't3',
             title: 'Clear Desk',
@@ -117,9 +117,9 @@ export const INITIAL_DATA: Node[] = [
         id: 'h2',
         name: 'Order',
         value: 7,
-        evidence: '',
+        
         scoreHistory: buildScoreHistory(7, 7),
-        tasks: [],
+        actions: [],
       },
     ],
   },

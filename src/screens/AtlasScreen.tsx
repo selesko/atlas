@@ -17,7 +17,8 @@ import { AtlasGraphView, Node } from '../types';
 const { width } = Dimensions.get('window');
 const STARFIELD_HEIGHT = 240;
 
-interface CopilotSuggestion {
+
+interface CopilotAction {
   label: string;
   action: string;
   nodeId?: string;
@@ -25,29 +26,20 @@ interface CopilotSuggestion {
 }
 
 interface AtlasScreenProps {
-  copilotContent: {
-    briefingLines: Array<{ prefix: string; text: string }>;
-    suggest1: CopilotSuggestion;
-    suggest2: CopilotSuggestion;
-  };
-  briefingHighlight: {
-    wordToColor: Record<string, string>;
-    re: RegExp;
-  };
-  onHandleSuggestion: (s: CopilotSuggestion) => void;
+  guidanceActions: CopilotAction[];
+  onAction: (a: CopilotAction) => void;
 }
 
-const SUGGESTION_BTN_LABELS: Record<string, string> = {
+const ACTION_BTN_LABELS: Record<string, string> = {
   calibrate: 'CALIBRATE',
-  logEvidence: 'LOG EVIDENCE',
+  addCalibration: 'ADD CALIBRATION',
   prioritize: 'PRIORITIZE',
-  deployTask: 'ADD TASK',
+  deployTask: 'ADD ACTION',
 };
 
 export const AtlasScreen: React.FC<AtlasScreenProps> = ({
-  copilotContent,
-  briefingHighlight,
-  onHandleSuggestion,
+  guidanceActions,
+  onAction,
 }) => {
   const { nodes, getNodeAvg } = useAppStore();
 
@@ -427,7 +419,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
               const ROW_H = 52;
               const VB_W = 320;
               const sr = (seed: number) => { const x = Math.sin(seed) * 10000; return x - Math.floor(x); };
-              const completedForNode = (n: Node) => n.goals.reduce((acc, g) => acc + g.tasks.filter(t => t.completed).length, 0);
+              const completedForNode = (n: Node) => n.goals.reduce((acc, g) => acc + g.actions.filter(a => a.completed).length, 0);
               return (
                 <View style={{ width: '100%', marginBottom: 4 }}>
                   {nodes.map((node) => {
@@ -511,24 +503,21 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
       </FadingBorder>
 
       {/* Atlas Guidance */}
-      <FadingBorder style={{ marginBottom: 20 }}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryHeading}>ATLAS GUIDANCE</Text>
-          {[copilotContent.suggest1, copilotContent.suggest2].map((sug, idx) => (
-            <View key={idx} style={[styles.summarySuggestionSection, idx === 1 && { marginBottom: 0 }]}>
-              <Text style={styles.summarySuggestionLabel}>
-                {sug.label.split(briefingHighlight.re).filter(Boolean).map((part, i) => {
-                  const col = briefingHighlight.wordToColor[part.toUpperCase()];
-                  return col ? <Text key={i} style={{ color: col }}>{part}</Text> : <Text key={i}>{part}</Text>;
-                })}
-              </Text>
-              <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onHandleSuggestion(sug)} activeOpacity={0.8}>
-                <Text style={styles.summarySuggestionBtnText}>{SUGGESTION_BTN_LABELS[sug.action] || 'GO'}</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      </FadingBorder>
+      {guidanceActions.length > 0 && (
+        <FadingBorder style={{ marginBottom: 20 }}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryHeading}>ATLAS GUIDANCE</Text>
+            {guidanceActions.slice(0, 2).map((act, idx) => (
+              <View key={idx} style={[styles.summarySuggestionSection, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
+                <Text style={styles.summarySuggestionLabel}>{act.label}</Text>
+                <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onAction(act)} activeOpacity={0.8}>
+                  <Text style={styles.summarySuggestionBtnText}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </FadingBorder>
+      )}
 
       {/* Live radar detail modal */}
       <SnapshotDetailModal

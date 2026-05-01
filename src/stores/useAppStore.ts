@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
-import { Node, Goal, Task, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
+import { Node, Goal, Action, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
 import { INITIAL_DATA } from '../constants/data';
 import { todayISO } from '../constants/data';
 import {
@@ -8,9 +8,9 @@ import {
   pushLocalData,
   upsertNode,
   upsertCoordinate,
-  upsertTask,
+  upsertAction,
   upsertProfile,
-  deleteTask as syncDeleteTask,
+  deleteAction as syncDeleteAction,
 } from '../services/sync';
 import { useSnapshotStore, RadarSnapshot } from './useSnapshotStore';
 
@@ -42,17 +42,17 @@ interface AppState {
 
   // Node actions
   updateValue: (nodeId: string, goalId: string, val: number) => void;
-  updateGoal: (nodeId: string, goalId: string, patch: Partial<Pick<Goal, 'name' | 'evidence'>>) => void;
+  updateGoal: (nodeId: string, goalId: string, patch: Partial<Pick<Goal, 'name'>>) => void;
   addCoordinate: (nodeId: string) => void;
-  addNode: (name: string, description: string, color: string) => void;
-  updateNode: (nodeId: string, patch: Partial<Pick<Node, 'name' | 'description' | 'color'>>) => void;
+  addNode: (name: string, description: string, color: string, why?: string) => void;
+  updateNode: (nodeId: string, patch: Partial<Pick<Node, 'name' | 'description' | 'color' | 'why'>>) => void;
 
-  // Task actions
-  toggleTask: (nodeId: string, goalId: string, taskId: string) => void;
-  togglePriority: (nodeId: string, goalId: string, taskId: string) => void;
-  addTask: (nodeId: string, goalId: string, title: string) => void;
-  saveTaskEdit: (
-    from: { nodeId: string; goalId: string; taskId: string },
+  // Action management
+  toggleAction: (nodeId: string, goalId: string, actionId: string) => void;
+  togglePriority: (nodeId: string, goalId: string, actionId: string) => void;
+  addAction: (nodeId: string, goalId: string, title: string) => void;
+  saveActionEdit: (
+    from: { nodeId: string; goalId: string; actionId: string },
     form: { title: string; nodeId: string; goalId: string; isPriority: boolean; notes: string; dueDate: string; reminder: string }
   ) => void;
 
@@ -81,7 +81,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   hasAccess: false,
   hasCompletedOnboarding: false,
 
-  setHasCompletedOnboarding: (value) => set({ hasCompletedOnboarding: value }),
+  setHasCompletedOnboarding: (value) => {
+    set({ hasCompletedOnboarding: value });
+    const { session, cognitiveModel, motivatorChoices, identityNotes, persona } = get();
+    if (session?.user.id) {
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices, identityNotes, persona, hasCompletedOnboarding: value });
+    }
+  },
 
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +105,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (remoteNodes.length === 0 && !profile) {
       // New user — push local state up to Supabase
-      await pushLocalData(userId, localNodes, { cognitiveModel, motivatorChoices, identityNotes });
+      const { persona, hasCompletedOnboarding } = get();
+      await pushLocalData(userId, localNodes, { cognitiveModel, motivatorChoices, identityNotes, persona, hasCompletedOnboarding });
       return;
     }
 
@@ -110,6 +117,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         cognitiveModel: profile.cognitiveModel,
         motivatorChoices: profile.motivatorChoices,
         identityNotes: profile.identityNotes,
+        persona: profile.persona,
+        hasCompletedOnboarding: profile.hasCompletedOnboarding,
       } : {}),
     });
   },
@@ -210,7 +219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const newId = `${prefix}${maxNum + 1}`;
         return {
           ...n,
-          goals: [...n.goals, { id: newId, name: 'New Coordinate', value: 5, evidence: '', tasks: [] }],
+          goals: [...n.goals, { id: newId, name: 'New Coordinate', value: 5, actions: [] }],
         };
       }),
     }));
@@ -232,8 +241,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       color,
       description: description.trim() || '',
       goals: [
-        { id: nodeId + '-1', name: 'Coordinate 1', value: 5, evidence: '', tasks: [] },
-        { id: nodeId + '-2', name: 'Coordinate 2', value: 5, evidence: '', tasks: [] },
+        { id: nodeId + '-1', name: 'Coordinate 1', value: 5, actions: [] },
+        { id: nodeId + '-2', name: 'Coordinate 2', value: 5, actions: [] },
       ],
     };
     set(state => ({ nodes: [...state.nodes, newNode] }));
@@ -257,9 +266,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // ─── Task actions ───────────────────────────────────────────────────────────
+  // ─── Action management ──────────────────────────────────────────────────────
 
-  toggleTask: (nodeId, goalId, taskId) => {
+  toggleAction: (nodeId, goalId, actionId) => {
     set(state => ({
       nodes: state.nodes.map(n => {
         if (n.id !== nodeId) return n;
@@ -269,11 +278,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (g.id !== goalId) return g;
             return {
               ...g,
-              tasks: g.tasks.map(t =>
-                t.id !== taskId ? t : {
-                  ...t,
-                  completed: !t.completed,
-                  ...(t.completed ? {} : { completedAt: todayISO() }),
+              actions: g.actions.map(a =>
+                a.id !== actionId ? a : {
+                  ...a,
+                  completed: !a.completed,
+                  ...(a.completed ? {} : { completedAt: todayISO() }),
                 }
               ),
             };
@@ -284,12 +293,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const userId = get().session?.user.id;
     if (userId) {
       const goal = get().nodes.find(n => n.id === nodeId)?.goals.find(g => g.id === goalId);
-      const task = goal?.tasks.find(t => t.id === taskId);
-      if (task) upsertTask(userId, nodeId, goalId, task);
+      const action = goal?.actions.find(a => a.id === actionId);
+      if (action) upsertAction(userId, nodeId, goalId, action);
     }
   },
 
-  togglePriority: (nodeId, goalId, taskId) => {
+  togglePriority: (nodeId, goalId, actionId) => {
     set(state => ({
       nodes: state.nodes.map(n =>
         n.id !== nodeId ? n : {
@@ -297,8 +306,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           goals: n.goals.map(g =>
             g.id !== goalId ? g : {
               ...g,
-              tasks: g.tasks.map(t =>
-                t.id !== taskId ? t : { ...t, isPriority: !t.isPriority }
+              actions: g.actions.map(a =>
+                a.id !== actionId ? a : { ...a, isPriority: !a.isPriority }
               ),
             }
           ),
@@ -308,15 +317,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const userId = get().session?.user.id;
     if (userId) {
       const goal = get().nodes.find(n => n.id === nodeId)?.goals.find(g => g.id === goalId);
-      const task = goal?.tasks.find(t => t.id === taskId);
-      if (task) upsertTask(userId, nodeId, goalId, task);
+      const action = goal?.actions.find(a => a.id === actionId);
+      if (action) upsertAction(userId, nodeId, goalId, action);
     }
   },
 
-  addTask: (nodeId, goalId, title) => {
+  addAction: (nodeId, goalId, title) => {
     const t = title.trim();
     if (!t) return;
-    const newTask: Task = {
+    const newAction: Action = {
       id: 't' + Date.now(),
       title: t,
       completed: false,
@@ -332,24 +341,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         n.id !== nodeId ? n : {
           ...n,
           goals: n.goals.map(g =>
-            g.id !== goalId ? g : { ...g, tasks: [...g.tasks, newTask] }
+            g.id !== goalId ? g : { ...g, actions: [...g.actions, newAction] }
           ),
         }
       ),
     }));
     const userId = get().session?.user.id;
-    if (userId) upsertTask(userId, nodeId, goalId, newTask);
+    if (userId) upsertAction(userId, nodeId, goalId, newAction);
   },
 
-  saveTaskEdit: (from, form) => {
+  saveActionEdit: (from, form) => {
     const { nodes } = get();
     const node = nodes.find(n => n.id === from.nodeId);
     const goal = node?.goals.find(g => g.id === from.goalId);
-    const task = goal?.tasks.find(t => t.id === from.taskId);
-    if (!task) return;
+    const action = goal?.actions.find(a => a.id === from.actionId);
+    if (!action) return;
 
-    const updated: Task = {
-      ...task,
+    const updated: Action = {
+      ...action,
       title: form.title,
       isPriority: form.isPriority,
       notes: form.notes || '',
@@ -365,7 +374,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             goals: n.goals.map(g =>
               g.id !== from.goalId ? g : {
                 ...g,
-                tasks: g.tasks.map(t => t.id !== from.taskId ? t : updated),
+                actions: g.actions.map(a => a.id !== from.actionId ? a : updated),
               }
             ),
           }
@@ -379,7 +388,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             goals: n.goals.map(g =>
               g.id !== from.goalId ? g : {
                 ...g,
-                tasks: g.tasks.filter(t => t.id !== from.taskId),
+                actions: g.actions.filter(a => a.id !== from.actionId),
               }
             ),
           }
@@ -389,7 +398,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             n.id !== form.nodeId ? n : {
               ...n,
               goals: n.goals.map(g =>
-                g.id !== form.goalId ? g : { ...g, tasks: [...g.tasks, updated] }
+                g.id !== form.goalId ? g : { ...g, actions: [...g.actions, updated] }
               ),
             }
           ),
@@ -399,34 +408,40 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Upsert with the new nodeId/goalId (PK is id+user_id, so this cleanly updates location too)
     const userId = get().session?.user.id;
-    if (userId) upsertTask(userId, form.nodeId, form.goalId, updated);
+    if (userId) upsertAction(userId, form.nodeId, form.goalId, updated);
   },
 
   // ─── Profile actions ────────────────────────────────────────────────────────
 
-  setPersona: (persona) => set({ persona }),
+  setPersona: (persona) => {
+    set({ persona });
+    const { session, cognitiveModel, motivatorChoices, identityNotes, hasCompletedOnboarding } = get();
+    if (session?.user.id) {
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices, identityNotes, persona, hasCompletedOnboarding });
+    }
+  },
 
   setCognitiveModel: (model) => {
     set({ cognitiveModel: model });
-    const { session, motivatorChoices, identityNotes } = get();
+    const { session, motivatorChoices, identityNotes, persona, hasCompletedOnboarding } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel: model, motivatorChoices, identityNotes });
+      upsertProfile(session.user.id, { cognitiveModel: model, motivatorChoices, identityNotes, persona, hasCompletedOnboarding });
     }
   },
 
   setMotivatorChoices: (choices) => {
     set({ motivatorChoices: choices });
-    const { session, cognitiveModel, identityNotes } = get();
+    const { session, cognitiveModel, identityNotes, persona, hasCompletedOnboarding } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices: choices, identityNotes });
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices: choices, identityNotes, persona, hasCompletedOnboarding });
     }
   },
 
   setIdentityNotes: (notes) => {
     set({ identityNotes: notes });
-    const { session, cognitiveModel, motivatorChoices } = get();
+    const { session, cognitiveModel, motivatorChoices, persona, hasCompletedOnboarding } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices, identityNotes: notes });
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices, identityNotes: notes, persona, hasCompletedOnboarding });
     }
   },
 

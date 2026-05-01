@@ -4,63 +4,222 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface BriefingLine { prefix: string; text: string; }
-interface Suggestion { label: string; action: string; nodeId?: string; goalId?: string; }
-interface BriefingResponse { briefingLines: BriefingLine[]; suggest1: Suggestion; suggest2: Suggestion; }
+interface CopilotStat { label: string; value: string; }
+interface CopilotLine { prefix: string; text: string; }
+interface CopilotAction { label: string; action: string; nodeId?: string; goalId?: string; }
+interface CopilotPayload {
+  header: string;
+  stats: CopilotStat[];
+  lines: CopilotLine[];
+  actions: CopilotAction[];
+}
 interface NodeIntentResponse { guidance: string; }
+
+// ─── Persona headers per tab ──────────────────────────────────────────────────
+
+const HEADERS: Record<string, Record<string, string>> = {
+  briefing: {
+    Engineer: 'SYSTEM STATUS',
+    Spiritual: 'FIELD READING',
+    Seeker: 'SIGNAL LOG',
+  },
+  nodeDiagnostic: {
+    Engineer: 'NODE DIAGNOSTIC',
+    Spiritual: 'NODE RESONANCE',
+    Seeker: 'NODE EXPLORER',
+  },
+  taskDispatch: {
+    Engineer: 'TASK DISPATCH',
+    Spiritual: 'TASK FLOW',
+    Seeker: 'TASK DISCOVERY',
+  },
+};
+
+// ─── Persona voice descriptors ────────────────────────────────────────────────
+
+const PERSONA_VOICE: Record<string, string> = {
+  Engineer: 'precise and systems-oriented — reference patterns, leverage points, and what to optimise. Avoid fluff.',
+  Spiritual: 'reflective and holistic — acknowledge the inner dimension, speak to meaning and resistance, not just mechanics.',
+  Seeker: 'curious and exploratory — frame things as questions or possibilities, encourage discovery over prescription.',
+};
+
+// ─── Node summary helper ──────────────────────────────────────────────────────
+
+function nodesSummaryText(nodes: any[]): string {
+  return nodes.map((n: any) => {
+    const avg = (n.goals.reduce((acc: number, g: any) => acc + Number(g.value), 0) / (n.goals.length || 1)).toFixed(1);
+    const goals = n.goals.map((g: any) =>
+      `  - [${g.id}] ${g.name}: ${g.value}/10, actions: ${g.calibrationCount ?? (g.actions?.length ?? 0)}`
+    ).join('\n');
+    const pendingActions = n.goals.flatMap((g: any) => (g.actions ?? []).filter((a: any) => !a.completed)).length;
+    return `Node [${n.id}]: ${n.name} (avg ${avg}/10, ${pendingActions} pending actions)\n${goals}`;
+  }).join('\n\n');
+}
 
 // ─── Prompt builders ─────────────────────────────────────────────────────────
 
-function buildBriefingPrompt(body: Record<string, unknown>): string {
+function buildAtlasBriefingPrompt(body: Record<string, unknown>): string {
   const nodes = (body.nodes as any[]) ?? [];
+  const persona = (body.persona as string) ?? 'Seeker';
   const cognitiveModel = body.cognitiveModel ?? 'Architect';
-  const peakPeriod = body.peakPeriod ?? 'MORNING';
-  const motivators = (body.motivators as string[]) ?? [];
+  const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
+  const nodesSummary = nodesSummaryText(nodes);
 
-  const nodesSummary = nodes.map((n: any) => {
-    const avg = (n.goals.reduce((acc: number, g: any) => acc + Number(g.value), 0) / (n.goals.length || 1)).toFixed(1);
-    const goals = n.goals.map((g: any) =>
-      `  - [${g.id}] ${g.name}: ${g.value}/10, evidence: "${g.evidence || 'none'}"`
-    ).join('\n');
-    const pendingTasks = n.goals.flatMap((g: any) => (g.tasks ?? []).filter((t: any) => !t.completed)).length;
-    return `Node [${n.id}]: ${n.name} (avg ${avg}/10, ${pendingTasks} pending tasks)\n${goals}`;
-  }).join('\n\n');
+  const totalAvg = nodes.length
+    ? (nodes.reduce((acc: number, n: any) =>
+        acc + n.goals.reduce((gacc: number, g: any) => gacc + Number(g.value), 0) / (n.goals.length || 1), 0)
+      / nodes.length).toFixed(1)
+    : '0.0';
 
-  return `You are a personal performance co-pilot for a self-improvement app called Calibra. Analyze the user's data and generate a concise tactical briefing.
+  const allAboveThreshold = nodes.every((n: any) => n.goals.every((g: any) => Number(g.value) >= 6));
+  const atlasHealthy = parseFloat(totalAvg) >= 7.5 && allAboveThreshold;
+  const toneHint = atlasHealthy
+    ? 'The atlas is HEALTHY — acknowledge momentum, reinforce what is working, and suggest how to deepen or sustain it. Do NOT manufacture a problem.'
+    : 'Identify the most important gap or drift to address.';
+
+  return `You are a personal performance co-pilot for a self-improvement app called Calibra. Analyze the user's overall life balance (their Atlas) and generate a brief, persona-aware overview.
 
 USER PROFILE:
 - Cognitive archetype: ${cognitiveModel}
-- Peak productivity period: ${peakPeriod}
-- Motivators: ${motivators.length ? motivators.join(', ') : 'not configured'}
+- Persona: ${persona}
+- Voice tone: ${voice}
 
-LIFE NODES (self-tracked areas with coordinates scored 1-10):
+LIFE NODES (overall avg: ${totalAvg}/10):
 ${nodesSummary || 'No nodes defined yet.'}
 
-Return ONLY a valid JSON object with this exact structure — no markdown, no explanation:
+TONE DIRECTION: ${toneHint}
+
+Return ONLY a valid JSON object — no markdown, no explanation:
 {
-  "briefingLines": [
-    { "prefix": "> STATUS:", "text": "ONE PUNCHY ALL-CAPS SENTENCE ABOUT THEIR OVERALL PATTERN." },
-    { "prefix": "> FOCUS:", "text": "ONE SPECIFIC ALL-CAPS INSIGHT ABOUT WHERE TO DIRECT ENERGY." }
+  "stats": [
+    { "label": "ATLAS AVG", "value": "${totalAvg}" },
+    { "label": "NODES", "value": "${nodes.length}" }
   ],
-  "suggest1": {
-    "label": "Specific action for the node needing most attention (sentence case, ≤12 words)",
-    "action": "calibrate",
-    "nodeId": "<exact node id from data>"
-  },
-  "suggest2": {
-    "label": "Specific action for the coordinate most needing evidence (sentence case, ≤12 words)",
-    "action": "logEvidence",
-    "nodeId": "<exact node id from data>",
-    "goalId": "<exact goal id from data>"
-  }
+  "lines": [
+    { "prefix": "> STATUS:", "text": "ONE PUNCHY ALL-CAPS SENTENCE THAT HONESTLY REFLECTS THE ATLAS STATE — AFFIRMING IF HEALTHY, DIAGNOSTIC IF NOT." },
+    { "prefix": "> FOCUS:", "text": "ONE ALL-CAPS SENTENCE — EITHER REINFORCE MOMENTUM OR REDIRECT ENERGY, BASED ON THE ACTUAL DATA." }
+  ],
+  "actions": [
+    { "label": "Specific action matching the tone above (sentence case, ≤12 words)", "action": "calibrate", "nodeId": "<exact node id from data>" },
+    { "label": "Specific action to add or deepen a calibration (sentence case, ≤12 words)", "action": "addCalibration", "nodeId": "<exact node id from data>", "goalId": "<exact goal id from data>" }
+  ]
 }
 
 Rules:
-- briefingLines[].text MUST be ALL CAPS, terminal-style, specific to the user's actual data
-- suggest labels are sentence case, concrete and motivating
-- nodeId and goalId MUST be copied verbatim from the IDs shown in brackets above
-- suggest1 action must be exactly "calibrate"
-- suggest2 action must be exactly "logEvidence"`;
+- lines[].text MUST be ALL CAPS, terminal-style, specific to actual data
+- action labels are sentence case, concrete, motivating, ≤12 words
+- nodeId and goalId MUST be copied verbatim from the IDs shown in brackets
+- Match the ${persona} persona voice tone throughout`;
+}
+
+function buildNodeDiagnosticPrompt(body: Record<string, unknown>): string {
+  const nodes = (body.nodes as any[]) ?? [];
+  const persona = (body.persona as string) ?? 'Seeker';
+  const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
+  const nodesSummary = nodesSummaryText(nodes);
+
+  const belowThreshold = nodes.flatMap((n: any) => n.goals.filter((g: any) => Number(g.value) < 6)).length;
+  const noCalibrations = nodes.flatMap((n: any) => n.goals.filter((g: any) => (g.calibrationCount ?? (g.actions?.length ?? 0)) === 0)).length;
+  const nodesHealthy = belowThreshold === 0 && noCalibrations === 0;
+  const toneHint = nodesHealthy
+    ? 'All coordinates are above threshold and have calibrations — acknowledge the strong state, reinforce consistency, and suggest how to push further. Do NOT invent a problem.'
+    : 'Identify the most important gap to address.';
+
+  return `You are a personal performance co-pilot for Calibra. Analyze the user's coordinate scores and generate a diagnostic report.
+
+COORDINATE DATA:
+${nodesSummary || 'No nodes defined yet.'}
+
+QUICK STATS: ${belowThreshold} coordinates below threshold (score < 6), ${noCalibrations} with no calibrations.
+TONE DIRECTION: ${toneHint}
+
+Persona: ${persona}
+Voice tone: ${voice}
+
+Return ONLY a valid JSON object — no markdown:
+{
+  "stats": [
+    { "label": "BELOW 6", "value": "${belowThreshold}" },
+    { "label": "NO CALIBRATIONS", "value": "${noCalibrations}" }
+  ],
+  "lines": [
+    { "prefix": "> SCAN:", "text": "ONE ALL-CAPS SENTENCE — AFFIRMING IF HEALTHY, DIAGNOSTIC IF NOT. SPECIFIC TO ACTUAL DATA." },
+    { "prefix": "> SIGNAL:", "text": "ONE ALL-CAPS SENTENCE — REINFORCE MOMENTUM OR NAME THE HIGHEST-LEVERAGE FIX. SPECIFIC TO ACTUAL DATA." }
+  ],
+  "actions": [
+    { "label": "Action matching the tone above for the most relevant coordinate (sentence case, ≤12 words)", "action": "calibrate", "nodeId": "<exact node id>" },
+    { "label": "Action to add or strengthen a calibration (sentence case, ≤12 words)", "action": "addCalibration", "nodeId": "<exact node id>", "goalId": "<exact goal id>" }
+  ]
+}
+
+Rules:
+- lines are ALL CAPS, specific to actual coordinate data
+- action labels are sentence case, concrete, ≤12 words
+- nodeId/goalId must be exact IDs from the data
+- Match the ${persona} persona voice`;
+}
+
+function buildTaskDispatchPrompt(body: Record<string, unknown>): string {
+  const nodes = (body.nodes as any[]) ?? [];
+  const persona = (body.persona as string) ?? 'Seeker';
+  const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
+
+  const allActions = nodes.flatMap((n: any) =>
+    n.goals.flatMap((g: any) => (g.actions ?? []).map((a: any) => ({
+      ...a, nodeName: n.name, nodeId: n.id, goalName: g.name, goalId: g.id,
+    })))
+  );
+  const completed = allActions.filter((a: any) => a.completed).length;
+  const pending = allActions.filter((a: any) => !a.completed).length;
+
+  const actionsSummary = nodes.map((n: any) => {
+    const coordLines = n.goals.map((g: any) => {
+      const pend = (g.actions ?? []).filter((a: any) => !a.completed);
+      if (!pend.length) return null;
+      const titles = pend.slice(0, 3).map((a: any) => `"${a.title}"`).join(', ');
+      return `  [${n.id}] ${n.name} / [${g.id}] ${g.name}: ${pend.length} pending — ${titles}`;
+    }).filter(Boolean).join('\n');
+    return coordLines || null;
+  }).filter(Boolean).join('\n');
+
+  const actionsHealthy = pending === 0 && completed > 0;
+  const actionToneHint = actionsHealthy
+    ? 'The backlog is CLEAR and completions are up — acknowledge the clean state, affirm the velocity, suggest what to build on next. Do NOT invent urgency.'
+    : pending > 0
+      ? 'Identify what to act on now.'
+      : 'No actions exist yet — suggest deploying the first one.';
+
+  return `You are a personal performance co-pilot for Calibra. Analyze the user's action backlog and generate a dispatch report.
+
+ACTION DATA:
+Total: ${completed} completed, ${pending} pending
+${actionsSummary || 'No pending actions.'}
+
+TONE DIRECTION: ${actionToneHint}
+Persona: ${persona}
+Voice tone: ${voice}
+
+Return ONLY a valid JSON object — no markdown:
+{
+  "stats": [
+    { "label": "COMPLETED", "value": "${completed}" },
+    { "label": "PENDING", "value": "${pending}" }
+  ],
+  "lines": [
+    { "prefix": "> VELOCITY:", "text": "ONE ALL-CAPS SENTENCE — AFFIRMING IF BACKLOG IS CLEAR, DIRECTIONAL IF NOT. SPECIFIC TO DATA." },
+    { "prefix": "> DISPATCH:", "text": "ONE ALL-CAPS SENTENCE — EITHER REINFORCE MOMENTUM OR NAME THE TOP PRIORITY. SPECIFIC TO DATA." }
+  ],
+  "actions": [
+    { "label": "Action matching the tone above (sentence case, ≤12 words)", "action": "prioritize", "nodeId": "<exact node id>", "goalId": "<exact goal id>" },
+    { "label": "Action to deploy or deepen a calibration (sentence case, ≤12 words)", "action": "deployTask", "nodeId": "<exact node id>", "goalId": "<exact goal id>" }
+  ]
+}
+
+Rules:
+- lines are ALL CAPS, specific to actual task data
+- action labels are sentence case, specific, ≤12 words
+- nodeId/goalId must be exact IDs from the data
+- Match the ${persona} persona voice`;
 }
 
 function buildNodeIntentPrompt(body: Record<string, unknown>): string {
@@ -70,16 +229,10 @@ function buildNodeIntentPrompt(body: Record<string, unknown>): string {
   const scoreRange = node.avg >= 8 ? 'high (thriving)' : node.avg >= 5 ? 'mid (developing)' : 'low (struggling)';
 
   const coordsSummary = (node.coordinates as any[]).map((c: any) =>
-    `  - ${c.name}: ${c.value}/10${c.evidence ? `, evidence: "${c.evidence}"` : ', no evidence logged'}`
+    `  - ${c.name}: ${c.value}/10, calibrations: ${c.calibrationCount ?? 0}`
   ).join('\n');
 
-  const personaVoice: Record<string, string> = {
-    Engineer: 'precise and systems-oriented — reference patterns, leverage points, and what to optimise. Avoid fluff.',
-    Spiritual: 'reflective and holistic — acknowledge the inner dimension, speak to meaning and resistance, not just mechanics.',
-    Seeker: 'curious and exploratory — frame things as questions or possibilities, encourage discovery over prescription.',
-  };
-
-  const voice = personaVoice[persona] ?? personaVoice['Seeker'];
+  const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
 
   return `You are a personal co-pilot inside an app called Calibra. A user has opened a life node to review it. Generate one short, context-aware guidance message for this node.
 
@@ -109,7 +262,10 @@ Return ONLY a valid JSON object, no markdown:
 
 // ─── Shared Anthropic caller ─────────────────────────────────────────────────
 
-async function callAnthropic(prompt: string, maxTokens: number): Promise<{ text: string } | { error: string; status: number }> {
+async function callAnthropic(
+  prompt: string,
+  maxTokens: number,
+): Promise<{ text: string } | { error: string; status: number }> {
   let res: Response;
   try {
     res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -140,12 +296,14 @@ async function callAnthropic(prompt: string, maxTokens: number): Promise<{ text:
   return { text: cleaned };
 }
 
-// ─── Handler ─────────────────────────────────────────────────────────────────
+// ─── CORS headers ─────────────────────────────────────────────────────────────
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// ─── Handler ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -170,8 +328,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const action = (body.action as string) ?? 'briefing';
+  const persona = (body.persona as string) ?? 'Seeker';
 
-  // ── Node intent ──────────────────────────────────────────────────────────────
+  // ── Node intent (inline, not a full copilot card) ─────────────────────────
   if (action === 'nodeIntent') {
     if (!body.node) {
       return new Response(JSON.stringify({ error: 'Missing node payload' }), {
@@ -179,7 +338,6 @@ Deno.serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json', ...CORS },
       });
     }
-
     const result = await callAnthropic(buildNodeIntentPrompt(body), 120);
     if ('error' in result) {
       return new Response(JSON.stringify({ error: result.error }), {
@@ -187,24 +345,27 @@ Deno.serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json', ...CORS },
       });
     }
-
     let intent: NodeIntentResponse;
-    try {
-      intent = JSON.parse(result.text);
-    } catch {
+    try { intent = JSON.parse(result.text); } catch {
       return new Response(JSON.stringify({ error: 'Failed to parse AI response', raw: result.text }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json', ...CORS },
+        status: 502, headers: { 'Content-Type': 'application/json', ...CORS },
       });
     }
-
     return new Response(JSON.stringify(intent), {
       headers: { 'Content-Type': 'application/json', ...CORS },
     });
   }
 
-  // ── Co-pilot briefing (default) ──────────────────────────────────────────────
-  const result = await callAnthropic(buildBriefingPrompt(body), 600);
+  // ── Tab co-pilot actions ──────────────────────────────────────────────────
+  const promptBuilders: Record<string, (b: Record<string, unknown>) => string> = {
+    briefing: buildAtlasBriefingPrompt,
+    nodeDiagnostic: buildNodeDiagnosticPrompt,
+    taskDispatch: buildTaskDispatchPrompt,
+  };
+
+  const buildPrompt = promptBuilders[action] ?? promptBuilders['briefing'];
+  const result = await callAnthropic(buildPrompt(body), 400);
+
   if ('error' in result) {
     return new Response(JSON.stringify({ error: result.error }), {
       status: result.status,
@@ -212,17 +373,23 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let briefing: BriefingResponse;
+  let aiResponse: Omit<CopilotPayload, 'header'>;
   try {
-    briefing = JSON.parse(result.text);
+    aiResponse = JSON.parse(result.text);
   } catch {
-    return new Response(JSON.stringify({ error: 'Failed to parse AI response as JSON', raw: result.text }), {
+    return new Response(JSON.stringify({ error: 'Failed to parse AI response', raw: result.text }), {
       status: 502,
       headers: { 'Content-Type': 'application/json', ...CORS },
     });
   }
 
-  return new Response(JSON.stringify(briefing), {
+  // Inject server-determined header (persona + tab)
+  const headerMap = HEADERS[action] ?? HEADERS['briefing'];
+  const header = headerMap[persona] ?? headerMap['Seeker'];
+
+  const payload: CopilotPayload = { header, ...aiResponse };
+
+  return new Response(JSON.stringify(payload), {
     headers: { 'Content-Type': 'application/json', ...CORS },
   });
 });

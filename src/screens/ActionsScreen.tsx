@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, KeyboardAvo
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useAppStore } from '../stores/useAppStore';
 import { THEME } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
+import { GlassCard } from '../components/GlassCard';
 
 interface ActionsScreenProps {
   addActionOpen: boolean;
@@ -24,6 +26,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
   onOpenCoordEdit: _onOpenCoordEdit,
 }) => {
   const { nodes, toggleAction, togglePriority } = useAppStore();
+  const theme = useTheme();
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
@@ -103,12 +106,12 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
         }}
         activeOpacity={0.7}
       >
-        <Text style={styles.addActionBtnText}>+ ADD ACTION</Text>
+        <Text style={[styles.addActionBtnText, { color: theme.accent }]}>+ ADD ACTION</Text>
       </TouchableOpacity>
 
       {nodeGroups.length === 0 ? (
         <View style={styles.actionEmptyState}>
-          <Text style={styles.actionEmptyStateText}>NO ACTIVE COORDINATE</Text>
+          <Text style={[styles.actionEmptyStateText, { color: theme.textMuted }]}>NO ACTIVE COORDINATE</Text>
         </View>
       ) : (
         nodeGroups.map(({ node, coords }) => {
@@ -153,7 +156,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                           onPress={() => onOpenEditAction(node.id, coord.goalId, a.id)}
                           activeOpacity={0.85}
                         >
-                          <View style={[styles.actionCard, { borderColor: node.color + '33' }]}>
+                          <GlassCard style={[styles.actionCard, { borderColor: node.color + '33' }]}>
                             <View style={styles.actionCardBody}>
                               <View style={styles.actionRow}>
                                 <TouchableOpacity
@@ -164,17 +167,17 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                                 >
                                   <Svg width={18} height={18} viewBox="0 0 24 24">
                                     {pri ? (
-                                      <Path fill={THEME.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                      <Path fill={theme.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                     ) : (
-                                      <Path fill="none" stroke={THEME.textDim} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                      <Path fill="none" stroke={theme.textMuted} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                     )}
                                   </Svg>
                                 </TouchableOpacity>
                                 <View style={styles.actionTitleBlock}>
-                                  <Text style={[styles.actionTitle, a.completed && styles.actionTitleStrike, a.completed && { opacity: 0.4 }]}>{a.title}</Text>
+                                  <Text style={[styles.actionTitle, { color: theme.text }, a.completed && styles.actionTitleStrike, a.completed && { opacity: 0.4 }]}>{a.title}</Text>
                                 </View>
                                 <View style={styles.actionRightBlock}>
-                                  {pri && <Text style={styles.actionPriorityLabel}>PRIORITY</Text>}
+                                  {pri && <Text style={[styles.actionPriorityLabel, { color: theme.accent }]}>PRIORITY</Text>}
                                   <TouchableOpacity
                                     onPress={() => toggleAction(node.id, coord.goalId, a.id)}
                                     activeOpacity={0.8}
@@ -187,14 +190,14 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                                           <Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                         </>
                                       ) : (
-                                        <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth="1.5" />
+                                        <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
                                       )}
                                     </Svg>
                                   </TouchableOpacity>
                                 </View>
                               </View>
                             </View>
-                          </View>
+                          </GlassCard>
                         </TouchableOpacity>
                       );
                     })}
@@ -235,7 +238,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
             onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); }}
             activeOpacity={1}
           />
-          <View style={styles.addActionSheet}>
+          <GlassCard style={styles.addActionSheet}>
 
             {/* Node selector */}
             <Text style={styles.addActionFormLabel}>NODE</Text>
@@ -332,7 +335,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                 <Text style={styles.addActionSubmitText}>ADD ACTION</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </GlassCard>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -344,28 +347,28 @@ const styles = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1 },
   pillInactive: { borderColor: 'rgba(255,255,255,0.15)' },
   pillText: { fontSize: 11, fontWeight: '700', letterSpacing: 2 },
-  addActionBtn: { marginBottom: 16, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: THEME.accent },
-  addActionBtnText: { color: THEME.accent, fontSize: 11, fontWeight: '700', letterSpacing: 2 },
-  addActionOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.75)' },
-  addActionSheet: { backgroundColor: THEME.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 48 },
-  addActionFormLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+  addActionBtn: { marginBottom: 16, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1 },
+  addActionBtnText: { fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+  addActionOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  addActionSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 48 },
+  addActionFormLabel: { fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
   addActionNodeRow: { flexDirection: 'row', marginBottom: 16 },
   addActionNodeBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, alignItems: 'center' },
-  addActionNodeBtnText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
+  addActionNodeBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: 1 },
   addActionDropdownWrap: { marginBottom: 16 },
-  addActionDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 4 },
-  addActionDropdownTriggerText: { color: THEME.border, fontSize: 14, flex: 1 },
+  addActionDropdownTrigger: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 4 },
+  addActionDropdownTriggerText: { fontSize: 14, flex: 1 },
   addActionDropdownChevron: { marginLeft: 8 },
   addActionDropdownList: { marginTop: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' },
   addActionDropdownItem: { paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   addActionDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  addActionCoordChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' },
-  addActionInput: { color: 'white', fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 },
+  addActionCoordChipText: { fontSize: 14, fontWeight: '600' },
+  addActionInput: { fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 },
   addActionActions: { flexDirection: 'row', justifyContent: 'flex-end' },
   addActionCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 },
-  addActionCancelText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
-  addActionSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 },
-  addActionSubmitText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  addActionCancelText: { fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  addActionSubmit: { paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderRadius: 12 },
+  addActionSubmitText: { fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   nodeSection: { marginBottom: 24 },
   nodeHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   nodeHeaderRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -381,17 +384,17 @@ const styles = StyleSheet.create({
   coordLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 8, opacity: 0.6 },
   actionCardOuter: { marginBottom: 6, borderRadius: 10, overflow: 'hidden' },
   actionCardPriority: { shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 },
-  actionCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14, backgroundColor: THEME.card, borderRadius: 10, borderWidth: 1 },
+  actionCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
   actionCardBody: { flex: 1, flexDirection: 'column' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   actionFocusBtn: { padding: 4, marginRight: 10 },
   actionTitleBlock: { flex: 1 },
   actionRightBlock: { flexDirection: 'row', alignItems: 'center' },
-  actionPriorityLabel: { fontSize: 14, fontWeight: '700', color: THEME.accent, letterSpacing: 1, marginRight: 8 },
-  actionTitle: { color: 'white', fontSize: 14 },
+  actionPriorityLabel: { fontSize: 14, fontWeight: '700', letterSpacing: 1, marginRight: 8 },
+  actionTitle: { fontSize: 14 },
   actionTitleStrike: { textDecorationLine: 'line-through' },
   actionEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  actionEmptyStateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+  actionEmptyStateText: { fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   inlineAddBtn: { paddingVertical: 8, paddingHorizontal: 4, alignSelf: 'flex-start' },
   inlineAddText: { fontSize: 10, fontWeight: '700', letterSpacing: 2, opacity: 0.45 },
 });

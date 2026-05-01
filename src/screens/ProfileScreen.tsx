@@ -7,6 +7,8 @@ import { useSnapshotStore, RadarSnapshot } from '../stores/useSnapshotStore';
 import { MiniRadar } from '../components/MiniRadar';
 import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME, MOTIVATOR_TENSIONS, PERSONA_DATA } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
+import { GlassCard } from '../components/GlassCard';
 import { Persona, MotivatorChoices } from '../types';
 
 const PERSONAS: Persona[] = ['Engineer', 'Seeker', 'Spiritual'];
@@ -27,7 +29,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
     motivatorChoices, setMotivatorChoices,
     identityNotes, setIdentityNotes,
     devOverride, setDevOverride,
+    themeMode, setThemeMode,
   } = useAppStore();
+  const theme = useTheme();
 
   const { snapshots, loaded, loadSnapshots } = useSnapshotStore();
 
@@ -47,52 +51,52 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
   return (
     <View>
       {/* Account */}
-      <View style={styles.profileCard}>
+      <GlassCard style={styles.profileCard}>
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M12 8v4m0 4h.01" />
+            <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth={1.5} />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" d="M12 8v4m0 4h.01" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>ACCOUNT</Text>
+          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>ACCOUNT</Text>
         </View>
         {session ? (
           <View>
-            <Text style={styles.accountEmail}>{session.user.email}</Text>
+            <Text style={[styles.accountEmail, { color: theme.text }]}>{session.user.email}</Text>
             <View style={styles.accountStatusRow}>
               <View style={styles.accountStatusDot} />
               <Text style={styles.accountStatusText}>SIGNED IN — UNRESTRICTED ACCESS</Text>
             </View>
             <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut} activeOpacity={0.8}>
-              <Text style={styles.signOutBtnText}>SIGN OUT</Text>
+              <Text style={[styles.signOutBtnText, { color: theme.textMuted }]}>SIGN OUT</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View>
-            <Text style={styles.accountGuestNote}>You're in local mode. Sign in to unlock Co-Pilot and sync your data.</Text>
+            <Text style={[styles.accountGuestNote, { color: theme.textSub }]}>You're in local mode. Sign in to unlock Co-Pilot and sync your data.</Text>
             <View style={styles.authBtnRow}>
-              <TouchableOpacity style={styles.signInBtn} onPress={onSignIn} activeOpacity={0.8}>
-                <Text style={styles.signInBtnText}>SIGN IN</Text>
+              <TouchableOpacity style={[styles.signInBtn, { borderColor: theme.accent }]} onPress={onSignIn} activeOpacity={0.8}>
+                <Text style={[styles.signInBtnText, { color: theme.accent }]}>SIGN IN</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.signUpBtn} onPress={onSignUp} activeOpacity={0.8}>
-                <Text style={styles.signUpBtnText}>CREATE ACCOUNT</Text>
+              <TouchableOpacity style={[styles.signUpBtn, { borderColor: theme.divider }]} onPress={onSignUp} activeOpacity={0.8}>
+                <Text style={[styles.signUpBtnText, { color: theme.textSub }]}>CREATE ACCOUNT</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
-      </View>
+      </GlassCard>
 
       {/* Persona */}
+      <GlassCard style={styles.profileCard}>
       <TouchableOpacity
-        style={styles.profileCard}
         onPress={() => { setSwipeIndex(PERSONAS.indexOf(persona)); setPersonaModalOpen(true); }}
         activeOpacity={0.85}
       >
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <Circle cx="12" cy="7" r="4" fill="none" stroke={THEME.textDim} strokeWidth={1.5} />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <Circle cx="12" cy="7" r="4" fill="none" stroke={theme.textMuted} strokeWidth={1.5} />
           </Svg>
-          <Text style={styles.profileSectionLabel}>PERSONA</Text>
+          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>PERSONA</Text>
         </View>
 
         {/* Inline graphic */}
@@ -143,13 +147,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         </View>
 
         <View style={styles.personaPreviewRow}>
-          <Text style={styles.personaPreviewName}>{persona.toUpperCase()}</Text>
+          <Text style={[styles.personaPreviewName, { color: theme.text }]}>{persona.toUpperCase()}</Text>
           <Svg width={14} height={14} viewBox="0 0 24 24">
-            <Path fill="none" stroke={THEME.textDim} strokeWidth="2" strokeLinecap="round" d="M9 6l6 6-6 6" />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth="2" strokeLinecap="round" d="M9 6l6 6-6 6" />
           </Svg>
         </View>
-        <Text style={styles.personaPreviewLine}>{PERSONA_DATA[persona].lines[0]}</Text>
+        <Text style={[styles.personaPreviewLine, { color: theme.textSub }]}>{PERSONA_DATA[persona].lines[0]}</Text>
       </TouchableOpacity>
+      </GlassCard>
 
       {/* Persona modal */}
       <Modal visible={personaModalOpen} animationType="fade" transparent>
@@ -247,12 +252,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
       </Modal>
 
       {/* Motivators */}
-      <View style={styles.profileCard}>
+      <GlassCard style={styles.profileCard}>
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>MOTIVATORS</Text>
+          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>MOTIVATORS</Text>
         </View>
         {MOTIVATOR_TENSIONS.map(tension => {
           const choice = motivatorChoices[tension.id];
@@ -282,42 +287,42 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
             </View>
           );
         })}
-      </View>
+      </GlassCard>
 
       {/* Identity Notes */}
-      <View style={styles.profileCard}>
+      <GlassCard style={styles.profileCard}>
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>CONTEXT</Text>
+          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>CONTEXT</Text>
         </View>
         <TextInput
-          style={styles.profileTextArea}
+          style={[styles.profileTextArea, { color: theme.text, borderColor: theme.glassBorder, backgroundColor: theme.inputBg }]}
           value={identityNotes}
           onChangeText={setIdentityNotes}
           placeholder="Who are you right now? What are you building, fighting, or becoming?"
-          placeholderTextColor={THEME.textDim}
+          placeholderTextColor={theme.textMuted}
           multiline
           numberOfLines={4}
           textAlignVertical="top"
         />
-      </View>
+      </GlassCard>
 
       {/* Logbook */}
-      <View style={styles.profileCard}>
+      <GlassCard style={styles.profileCard}>
         <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-            <Path fill="none" stroke={THEME.textDim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
           </Svg>
-          <Text style={styles.profileSectionLabel}>LOGBOOK</Text>
+          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>LOGBOOK</Text>
         </View>
 
         {snapshots.length === 0 ? (
           <View style={styles.logbookEmpty}>
-            <Text style={styles.logbookEmptyTitle}>NO ENTRIES YET</Text>
-            <Text style={styles.logbookEmptyBody}>
+            <Text style={[styles.logbookEmptyTitle, { color: theme.textMuted }]}>NO ENTRIES YET</Text>
+            <Text style={[styles.logbookEmptyBody, { color: theme.textMuted }]}>
               When a node average crosses 7.0, a snapshot of your Atlas is saved here automatically.
             </Text>
           </View>
@@ -333,23 +338,23 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
               const yearStr = d.getFullYear().toString();
               const triggerNode = snap.nodeScores.find(n => n.nodeId === snap.triggerNodeId);
               return (
-                <TouchableOpacity key={snap.id} style={styles.logbookCard} onPress={() => setSelectedSnapshot(snap)} activeOpacity={0.8}>
+                <TouchableOpacity key={snap.id} style={[styles.logbookCard, { backgroundColor: theme.inputBg, borderColor: theme.divider }]} onPress={() => setSelectedSnapshot(snap)} activeOpacity={0.8}>
                   <MiniRadar nodes={snap.nodeScores} size={88} />
                   <View style={styles.logbookCardMeta}>
-                    <Text style={styles.logbookCardDate}>{dateStr}</Text>
-                    <Text style={styles.logbookCardYear}>{yearStr}</Text>
-                    <View style={[styles.logbookCardDot, { backgroundColor: triggerNode?.color ?? THEME.accent }]} />
-                    <Text style={[styles.logbookCardNode, { color: triggerNode?.color ?? THEME.accent }]}>
+                    <Text style={[styles.logbookCardDate, { color: theme.text }]}>{dateStr}</Text>
+                    <Text style={[styles.logbookCardYear, { color: theme.textMuted }]}>{yearStr}</Text>
+                    <View style={[styles.logbookCardDot, { backgroundColor: triggerNode?.color ?? theme.accent }]} />
+                    <Text style={[styles.logbookCardNode, { color: triggerNode?.color ?? theme.accent }]}>
                       {snap.triggerNodeName.toUpperCase()}
                     </Text>
-                    <Text style={styles.logbookCardAvg}>{snap.triggerNodeAvg.toFixed(1)}</Text>
+                    <Text style={[styles.logbookCardAvg, { color: theme.textMuted }]}>{snap.triggerNodeAvg.toFixed(1)}</Text>
                   </View>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
         )}
-      </View>
+      </GlassCard>
 
       {/* Snapshot detail modal */}
       {selectedSnapshot && (
@@ -364,11 +369,35 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         />
       )}
 
-      {/* Developer Override */}
-      <View style={styles.devOverrideSection}>
-        <Text style={styles.devOverrideLabel}>DEVELOPER OVERRIDE</Text>
+      {/* Theme Toggle */}
+      <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
+        <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>APPEARANCE</Text>
         <View style={styles.devOverrideRow}>
-          <Text style={styles.systemAccessTier}>Force hasAccess</Text>
+          <Text style={[styles.systemAccessTier, { color: theme.textSub }]}>{themeMode === 'dark' ? '◆ DARK MODE' : '◇ LIGHT MODE'}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setThemeMode('dark')}
+              style={[styles.themeToggleBtn, themeMode === 'dark' && { borderColor: theme.accent }]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.themeToggleBtnText, { color: themeMode === 'dark' ? theme.accent : theme.textMuted }]}>DARK</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setThemeMode('light')}
+              style={[styles.themeToggleBtn, themeMode === 'light' && { borderColor: theme.accent }]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.themeToggleBtnText, { color: themeMode === 'light' ? theme.accent : theme.textMuted }]}>LIGHT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Developer Override */}
+      <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
+        <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>DEVELOPER OVERRIDE</Text>
+        <View style={styles.devOverrideRow}>
+          <Text style={[styles.systemAccessTier, { color: theme.textSub }]}>Force hasAccess</Text>
           <Switch
             value={devOverride}
             onValueChange={setDevOverride}
@@ -426,6 +455,8 @@ const styles = StyleSheet.create({
   logbookCardNode: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
   logbookCardAvg: { color: THEME.textDim, fontSize: 11, fontWeight: '600', marginTop: 1 },
 
+  themeToggleBtn: { paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
+  themeToggleBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
   devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 },
   devOverrideLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 10 },
   devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

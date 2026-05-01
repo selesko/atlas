@@ -12,6 +12,8 @@ import { useAppStore } from '../stores/useAppStore';
 import { FadingBorder } from '../components/FadingBorder';
 import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
+import { GlassCard } from '../components/GlassCard';
 import { AtlasGraphView, Node } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -42,6 +44,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   onAction,
 }) => {
   const { nodes, getNodeAvg } = useAppStore();
+  const theme = useTheme();
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
@@ -245,31 +248,31 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   return (
     <>
       {/* System Status */}
-      <View style={styles.systemManifestCard}>
+      <GlassCard style={styles.systemManifestCard}>
         <View style={styles.systemManifestPrimaryRow}>
           <View style={styles.systemManifestLeft}>
-            <Text style={styles.systemManifestBracketLabel}>SYSTEM STATUS</Text>
+            <Text style={[styles.systemManifestBracketLabel, { color: theme.textMuted }]}>SYSTEM STATUS</Text>
           </View>
-          <View style={styles.systemManifestVLine} />
+          <View style={[styles.systemManifestVLine, { backgroundColor: theme.divider }]} />
           <View style={styles.systemManifestStatusBlock}>
-            <Text style={styles.systemManifestBracketValue}>{systemBalance}</Text>
+            <Text style={[styles.systemManifestBracketValue, { color: theme.text }]}>{systemBalance}</Text>
           </View>
         </View>
-      </View>
+      </GlassCard>
 
       {/* Atlas Card */}
-      <View style={styles.atlasCard}>
+      <GlassCard style={styles.atlasCard}>
         <View style={styles.atlasCardContent}>
           {/* Header row with view switcher */}
-          <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow]}>
+          <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow, { backgroundColor: 'transparent', borderBottomColor: theme.divider }]}>
             <View style={styles.atlasScoreBlock}>
-              <Text style={styles.statLabel}>
+              <Text style={[styles.statLabel, { color: theme.accent }]}>
                 {atlasGraphView === 'radar' ? 'RADAR' : atlasGraphView === 'trajectory' ? 'TRAJECTORY' : 'CONSTELLATION'}
               </Text>
             </View>
             <View style={styles.atlasViewSwitcher}>
               {(['radar', 'trajectory', 'constellation'] as const).map(v => {
-                const c = atlasGraphView === v ? THEME.accent : THEME.textDim;
+                const c = atlasGraphView === v ? theme.accent : theme.textMuted;
                 return (
                   <TouchableOpacity
                     key={v}
@@ -410,7 +413,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                   </View>
                 </View>
                 <View style={styles.trajectoryPastLogsRow}>
-                  <Text style={styles.trajectoryPastLogsLabel}>PAST LOGS</Text>
+                  <Text style={[styles.trajectoryPastLogsLabel, { color: theme.textMuted }]}>PAST LOGS</Text>
                 </View>
               </>
             )}
@@ -451,12 +454,12 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       </View>
                     );
                   })}
-                  <View style={styles.atlasLegend}>
+                  <View style={[styles.atlasLegend, { borderTopColor: theme.divider }]}>
                     {nodes.map((n) => (
                       <View key={n.id} style={styles.legendItem}>
                         <View style={[styles.legendDot, { backgroundColor: n.color }]} />
-                        <Text style={styles.legendLabel}>{n.name.toUpperCase()}</Text>
-                        <Text style={styles.legendValue}>{getNodeAvg(n)}</Text>
+                        <Text style={[styles.legendLabel, { color: theme.textMuted }]}>{n.name.toUpperCase()}</Text>
+                        <Text style={[styles.legendValue, { color: theme.text }]}>{getNodeAvg(n)}</Text>
                       </View>
                     ))}
                   </View>
@@ -466,7 +469,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
           </View>
 
           {atlasGraphView === 'radar' && (
-            <View style={styles.atlasLegend}>
+            <View style={[styles.atlasLegend, { borderTopColor: theme.divider }]}>
               {nodes.map(n => (
                 <TouchableOpacity
                   key={n.id}
@@ -475,47 +478,47 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                   activeOpacity={0.8}
                 >
                   <View style={[styles.legendDot, { backgroundColor: n.color }]} />
-                  <Text style={[styles.legendLabel, atlasHighlightId === n.id && styles.legendLabelHighlight]}>{n.name.toUpperCase()}</Text>
-                  <Text style={styles.legendValue}>{getNodeAvg(n)}</Text>
+                  <Text style={[styles.legendLabel, { color: theme.textMuted }, atlasHighlightId === n.id && { color: theme.accent }]}>{n.name.toUpperCase()}</Text>
+                  <Text style={[styles.legendValue, { color: theme.text }]}>{getNodeAvg(n)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
-      </View>
+      </GlassCard>
 
       {/* Structural Drift */}
       <FadingBorder style={{ marginBottom: 12 }}>
-        <View style={styles.deflectionCard}>
+        <GlassCard style={styles.deflectionCard}>
           <View style={styles.deflectionRow}>
             <View style={styles.deflectionLeft}>
-              <Text style={styles.deflectionLabel}>STRUCTURAL DRIFT</Text>
-              <Text style={styles.deflectionValue}>{driftDelta === '0' ? '0 PT(S)' : `${driftDelta} PT(S)`}</Text>
+              <Text style={[styles.deflectionLabel, { color: theme.textMuted }]}>STRUCTURAL DRIFT</Text>
+              <Text style={[styles.deflectionValue, { color: theme.text }]}>{driftDelta === '0' ? '0 PT(S)' : `${driftDelta} PT(S)`}</Text>
             </View>
-            <View style={styles.deflectionVLine} />
+            <View style={[styles.deflectionVLine, { backgroundColor: theme.divider }]} />
             <View style={styles.deflectionRight}>
               <Svg width={32} height={32} viewBox="0 0 24 24">
                 <Path d={arrowPath} fill={arrowColor} />
               </Svg>
             </View>
           </View>
-        </View>
+        </GlassCard>
       </FadingBorder>
 
       {/* Atlas Guidance */}
       {guidanceActions.length > 0 && (
         <FadingBorder style={{ marginBottom: 20 }}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryHeading}>ATLAS GUIDANCE</Text>
+          <GlassCard style={styles.summaryCard}>
+            <Text style={[styles.summaryHeading, { color: theme.textMuted }]}>ATLAS GUIDANCE</Text>
             {guidanceActions.slice(0, 2).map((act, idx) => (
-              <View key={idx} style={[styles.summarySuggestionSection, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
-                <Text style={styles.summarySuggestionLabel}>{act.label}</Text>
+              <View key={idx} style={[styles.summarySuggestionSection, { borderColor: theme.glassBorder }, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
+                <Text style={[styles.summarySuggestionLabel, { color: theme.text }]}>{act.label}</Text>
                 <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onAction(act)} activeOpacity={0.8}>
-                  <Text style={styles.summarySuggestionBtnText}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
+                  <Text style={[styles.summarySuggestionBtnText, { color: theme.accent }]}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
                 </TouchableOpacity>
               </View>
             ))}
-          </View>
+          </GlassCard>
         </FadingBorder>
       )}
 

@@ -1,5 +1,6 @@
+// ─── Legacy flat token (kept for gradual migration) ──────────────────────────
 export const THEME = {
-  bg: '#152238',
+  bg: '#0a0f1e',
   card: '#07101c',
   border: '#E2E8F0',
   accent: '#38BDF8',
@@ -10,6 +11,117 @@ export const THEME = {
   cardBorder: 'rgba(226,232,240,0.5)',
   glow: 'rgba(56,189,248,0.22)',
   glowPop: 'rgba(56,189,248,0.3)',
+};
+
+// ─── Dual-mode theme system ───────────────────────────────────────────────────
+
+export type ThemeMode = 'dark' | 'light';
+
+export interface ThemeTokens {
+  // Backgrounds
+  bg: string;
+  bgDeep: string;
+  // Blob gradient aura colors (3 blobs)
+  blob1: string;
+  blob2: string;
+  blob3: string;
+  blobOpacity: number;
+  // Glass cards
+  glass: string;           // background of card
+  glassBorder: string;     // border color
+  glassBlurTint: 'dark' | 'light' | 'default'; // for expo-blur
+  glassBlurIntensity: number;
+  glassShadow: string;
+  // Nav bar (needs higher contrast than cards)
+  navGlass: string;
+  navBorder: string;
+  // Text
+  text: string;
+  textSub: string;
+  textMuted: string;
+  // Accent / brand
+  accent: string;
+  accentGlow: string;
+  // Node palette
+  mind: string;
+  body: string;
+  home: string;
+  // Misc
+  divider: string;
+  inputBg: string;
+}
+
+export const DARK_THEME: ThemeTokens = {
+  // Deep space navy base
+  bg: '#080d1a',
+  bgDeep: '#04070f',
+  // Deep cosmic blob auras — purple, blue, rose
+  blob1: '#3b1f6e',       // deep violet
+  blob2: '#0f2d5e',       // deep navy blue
+  blob3: '#4a0a2e',       // deep rose
+  blobOpacity: 0.55,
+  // Frosted dark glass
+  glass: 'rgba(10, 18, 40, 0.55)',
+  glassBorder: 'rgba(255, 255, 255, 0.08)',
+  glassBlurTint: 'dark',
+  glassBlurIntensity: 28,
+  glassShadow: 'rgba(0, 0, 0, 0.45)',
+  // Nav — slightly more opaque dark for contrast
+  navGlass: 'rgba(6, 10, 24, 0.88)',
+  navBorder: 'rgba(255, 255, 255, 0.08)',
+  // Text
+  text: '#f0f4ff',
+  textSub: '#94a3b8',
+  textMuted: '#475569',
+  // Accent
+  accent: '#38BDF8',
+  accentGlow: 'rgba(56, 189, 248, 0.22)',
+  // Nodes
+  mind: '#38BDF8',
+  body: '#FB7185',
+  home: '#A78BFA',
+  // Misc
+  divider: 'rgba(255, 255, 255, 0.07)',
+  inputBg: 'rgba(255, 255, 255, 0.06)',
+};
+
+export const LIGHT_THEME: ThemeTokens = {
+  // Soft off-white base
+  bg: '#f0f4ff',
+  bgDeep: '#e8eef8',
+  // Soft aura blobs — lavender, sky blue, soft rose
+  blob1: '#c4b5fd',       // soft violet
+  blob2: '#93c5fd',       // soft blue
+  blob3: '#fbcfe8',       // soft pink
+  blobOpacity: 0.65,
+  // Frosted light glass — more opaque so cards read clearly
+  glass: 'rgba(255, 255, 255, 0.82)',
+  glassBorder: 'rgba(255, 255, 255, 0.9)',
+  glassBlurTint: 'light',
+  glassBlurIntensity: 16,
+  glassShadow: 'rgba(100, 116, 139, 0.14)',
+  // Nav — solid dark so icons are always legible
+  navGlass: 'rgba(20, 24, 48, 0.90)',
+  navBorder: 'rgba(255, 255, 255, 0.08)',
+  // Text
+  text: '#1e293b',
+  textSub: '#475569',
+  textMuted: '#64748b',
+  // Accent
+  accent: '#4f46e5',
+  accentGlow: 'rgba(79, 70, 229, 0.15)',
+  // Nodes — slightly richer for light bg
+  mind: '#0ea5e9',
+  body: '#f43f5e',
+  home: '#8b5cf6',
+  // Misc
+  divider: 'rgba(15, 23, 42, 0.08)',
+  inputBg: 'rgba(15, 23, 42, 0.05)',
+};
+
+export const THEMES: Record<ThemeMode, ThemeTokens> = {
+  dark: DARK_THEME,
+  light: LIGHT_THEME,
 };
 
 export const NODE_COLORS = [

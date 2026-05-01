@@ -19,6 +19,8 @@ import { ActionsScreen } from './src/screens/ActionsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { OrbitalValueBadge } from './src/components/OrbitalValueBadge';
+import { BlobBackground } from './src/components/BlobBackground';
+import { useTheme } from './src/hooks/useTheme';
 
 const ONBOARDING_KEY = 'calibra_onboarding_complete';
 const { width } = Dimensions.get('window');
@@ -75,11 +77,15 @@ export default function App() {
   const {
     nodes, hasAccess, session,
     cognitiveModel, persona,
-    updateValue, updateNode, addNode: storeAddNode, saveActionEdit,
+    updateValue, updateNode, updateGoal, addNode: storeAddNode, saveActionEdit,
     toggleAction, getNodeAvg,
     setSession, loadUserData,
     setCognitiveModel,
   } = useAppStore();
+
+  // — active theme tokens —
+  const theme = useTheme();
+  const isDark = theme.glassBlurTint === 'dark';
 
   // — header — derived from persona + active tab
   const headerSubtitle = PERSONA_SUBTITLES[persona]?.[activeTab] ?? '';
@@ -360,21 +366,22 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bgDeep }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <BlobBackground />
       <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>{activeTab.toUpperCase()}</Text>
-              <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>{activeTab.toUpperCase()}</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textMuted }]}>{headerSubtitle}</Text>
             </View>
             <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setInfoOpen(true)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Svg width={20} height={20} viewBox="0 0 24 24">
-                <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth="1.5" />
-                <Circle cx="12" cy="8" r="1.5" fill={THEME.textDim} />
-                <Path d="M12 11v5" stroke={THEME.textDim} strokeWidth="1.5" strokeLinecap="round" />
+                <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                <Circle cx="12" cy="8" r="1.5" fill={theme.textMuted} />
+                <Path d="M12 11v5" stroke={theme.textMuted} strokeWidth="1.5" strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
           </View>
@@ -427,10 +434,10 @@ export default function App() {
       </View>
 
       {/* Tab bar */}
-      <View style={styles.nav}>
+      <View style={[styles.nav, { backgroundColor: theme.navGlass, borderTopColor: theme.navBorder }]}>
         {(['Atlas', 'Nodes', 'Actions', 'Profile'] as const).map(t => {
           const active = activeTab === t;
-          const c = active ? THEME.accent : THEME.textDim;
+          const c = active ? theme.accent : theme.textMuted;
           return (
             <TouchableOpacity key={t} onPress={() => setActiveTab(t)} style={styles.navBtn}>
               <View style={styles.navIconWrap}>
@@ -578,7 +585,15 @@ export default function App() {
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingCoordinate(null)} activeOpacity={1} />
             <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
               <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-                <Text style={styles.coordDetailName}>{goal.name}</Text>
+                <TextInput
+                  style={[styles.coordDetailName, styles.coordDetailNameInput]}
+                  value={goal.name}
+                  onChangeText={(text) => updateGoal(node.id, goal.id, { name: text })}
+                  placeholder="Coordinate name"
+                  placeholderTextColor={THEME.textDim}
+                  returnKeyType="done"
+                  selectTextOnFocus
+                />
                 <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the slider to score its integrity. Add actions below — things you do to keep this coordinate aligned.</Text>
                 <Text style={styles.reflectionQuestion}>HOW IS THE INTEGRITY OF THIS COORDINATE?</Text>
                 <View style={styles.sliderRow}>
@@ -843,7 +858,7 @@ const styles = StyleSheet.create({
   headerInfoBtn: { padding: 4 },
 
   // Nav
-  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, borderTopColor: THEME.cardBorder, backgroundColor: THEME.card, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden', paddingHorizontal: 16 },
+  nav: { flexDirection: 'row', height: 100, borderTopWidth: 1, position: 'absolute', bottom: 0, width: '100%', overflow: 'hidden', paddingHorizontal: 16 },
   navBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navIconWrap: {},
 
@@ -915,6 +930,7 @@ const styles = StyleSheet.create({
   // Coordinate edit
   coordinateEditCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
   coordDetailName: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+  coordDetailNameInput: { color: '#f0f4ff', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', paddingVertical: 4, paddingHorizontal: 0 },
   coordDetailSubtext: { color: THEME.textDim, fontSize: 13, lineHeight: 18, marginBottom: 20 },
   reflectionQuestion: { color: '#E2E8F0', fontSize: 15, fontWeight: '700', letterSpacing: 2, marginBottom: 20, textAlign: 'center', lineHeight: 22 },
   calibrationFeedLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 6, textTransform: 'uppercase' },

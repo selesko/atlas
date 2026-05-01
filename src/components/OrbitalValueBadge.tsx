@@ -20,8 +20,8 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
   const sweep    = fraction * 360;
   const complete = sweep >= 359.9;
 
-  // Full orbit = node color; anything less = white
-  const activeColor = complete ? color : 'rgba(255,255,255,0.85)';
+  // Always use node color — works on both dark and light backgrounds
+  const activeColor = color;
 
   // Arc end point (start is always top = (cx, cy - R))
   const endRad = ((-90 + sweep) * Math.PI) / 180;

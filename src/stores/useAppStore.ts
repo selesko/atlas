@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import { Node, Goal, Action, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
+import { ThemeMode, THEMES } from '../constants/theme';
 import { INITIAL_DATA } from '../constants/data';
 import { todayISO } from '../constants/data';
 import {
@@ -23,6 +26,10 @@ interface AppState {
   motivatorChoices: MotivatorChoices;
   identityNotes: string;
   persona: Persona;
+
+  // Theme
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
 
   // Auth state
   // hasAccess is true when: real Supabase session exists OR dev override is on
@@ -70,12 +77,16 @@ interface AppState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useAppStore = create<AppState>((set, get) => ({
-  nodes: INITIAL_DATA,
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      nodes: INITIAL_DATA,
   cognitiveModel: 'Architect',
   motivatorChoices: {},
   identityNotes: '',
   persona: 'Seeker',
+  themeMode: 'dark',
+  setThemeMode: (mode) => set({ themeMode: mode }),
   session: null,
   devOverride: false,
   hasAccess: false,
@@ -449,4 +460,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setHasAccess: (value) => {
     set({ devOverride: value, hasAccess: get().session !== null || value });
   },
-}));
+    }),
+    {
+      name: 'calibra-app-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        nodes: state.nodes,
+        cognitiveModel: state.cognitiveModel,
+        motivatorChoices: state.motivatorChoices,
+        identityNotes: state.identityNotes,
+        persona: state.persona,
+        hasCompletedOnboarding: state.hasCompletedOnboarding,
+      }),
+    }
+  )
+);

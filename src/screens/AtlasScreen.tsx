@@ -278,7 +278,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       let clickedNode = null;
                       const pts = nodes.map((n, i) => {
                         const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                        const r = (parseFloat(getNodeAvg(n)) / 10) * 80;
+                        const r = radarPulseScale * ((parseFloat(getNodeAvg(n)) / 10) * 120 + Math.sin(nodeBreathValue * Math.PI + i) * 6);
                         return { x: r * Math.cos(angle) + 170, y: r * Math.sin(angle) + 170, color: n.color, id: n.id };
                       });
                       for (const p of pts) {
@@ -313,7 +313,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         {(() => {
                           const pts = nodes.map((n, i) => {
                             const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                            const r = (parseFloat(getNodeAvg(n)) / 10) * 80;
+                            const r = radarPulseScale * ((parseFloat(getNodeAvg(n)) / 10) * 120 + Math.sin(nodeBreathValue * Math.PI + i) * 6);
                             return { x: r * Math.cos(angle), y: r * Math.sin(angle), color: n.color, id: n.id };
                           });
                           const breathRadius = 9 + nodeBreathValue * 6;

@@ -1,123 +1,154 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Animated, Easing, StyleSheet } from 'react-native';
 import Svg, { Circle, Line, G } from 'react-native-svg';
 import { Node, AtlasGraphView } from '../types';
 import { ThemeTokens } from '../constants/theme';
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 interface CosmicSystemViewProps {
   nodes: Node[];
   view: AtlasGraphView; // 'coordinates' | 'actions'
   theme: ThemeTokens;
+  activeNodeId: string | null;
 }
 
-export function CosmicSystemView({ nodes, view, theme }: CosmicSystemViewProps) {
+export function CosmicSystemView({ nodes, view, theme, activeNodeId }: CosmicSystemViewProps) {
   // Slow continuous rotation
   const spinValue = useRef(new Animated.Value(0)).current;
+  const pulseValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.loop(
       Animated.timing(spinValue, {
         toValue: 1,
-        duration: 90000, // 90 seconds for a very slow, majestic rotation
+        duration: 90000, 
         easing: Easing.linear,
         useNativeDriver: true,
       })
     ).start();
-  }, [spinValue]);
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseValue, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseValue, { toValue: 0, duration: 1500, useNativeDriver: true })
+      ])
+    ).start();
+  }, [spinValue, pulseValue]);
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg']
   });
 
+  const pulseScale = pulseValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.4]
+  });
+
   const SVG_SIZE = 340;
   const CENTER = SVG_SIZE / 2;
-  const SYSTEM_RADIUS = 95; // Radius of Node orbit around the center
+
+  const activeNode = nodes.find(n => n.id === activeNodeId) || nodes[0];
+  if (!activeNode) return null;
+
+  // Generate deterministic "fake" background dots
+  const fakeDots = useMemo(() => {
+    const sr = (seed: number) => { const x = Math.sin(seed) * 10000; return x - Math.floor(x); };
+    const count = view === 'coordinates' ? 18 : 60;
+    return Array.from({ length: count }, (_, i) => {
+      const angle = sr(i * 13.7) * 2 * Math.PI;
+      const radius = 40 + sr(i * 7.3) * 100;
+      return {
+        cx: CENTER + radius * Math.cos(angle),
+        cy: CENTER + radius * Math.sin(angle),
+        r: view === 'coordinates' ? 1.5 + sr(i)*2 : 1 + sr(i),
+        op: 0.1 + sr(i)*0.2
+      };
+    });
+  }, [view]);
 
   return (
     <View style={styles.container}>
       <Animated.View style={{ transform: [{ rotate: spin }] }}>
         <Svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}>
           
-          {/* Central System Star (The User) */}
-          <Circle cx={CENTER} cy={CENTER} r={16} fill={theme.text} opacity={0.9} />
-          <Circle cx={CENTER} cy={CENTER} r={28} fill={theme.text} opacity={0.15} />
-          <Circle cx={CENTER} cy={CENTER} r={40} fill={theme.text} opacity={0.05} />
+          {/* Draw Fake Background Elements */}
+          {fakeDots.map((d, i) => (
+            <Circle key={`fake-${i}`} cx={d.cx} cy={d.cy} r={d.r} fill={activeNode.color} opacity={d.op} />
+          ))}
 
-          {/* Node Orbit Path */}
-          <Circle cx={CENTER} cy={CENTER} r={SYSTEM_RADIUS} stroke={theme.divider} strokeWidth={1} fill="none" strokeDasharray="4 6" opacity={0.5} />
+          {/* Central Active Node */}
+          <Circle cx={CENTER} cy={CENTER} r={18} fill={activeNode.color} />
+          <Circle cx={CENTER} cy={CENTER} r={28} fill={activeNode.color} opacity={0.2} />
+          <Circle cx={CENTER} cy={CENTER} r={40} fill={activeNode.color} opacity={0.05} />
 
-          {nodes.map((node, i) => {
-            const nodeAngle = (i / nodes.length) * 2 * Math.PI;
-            const nx = CENTER + SYSTEM_RADIUS * Math.cos(nodeAngle);
-            const ny = CENTER + SYSTEM_RADIUS * Math.sin(nodeAngle);
-            
-            // Calculate Node size based on score
-            const nodeScore = node.goals.length ? node.goals.reduce((s, g) => s + g.value, 0) / node.goals.length : 0;
-            const nodeRadius = 8 + (nodeScore / 10) * 8; // 8 to 16
-
-            const COORD_RADIUS = 40; // Orbit radius of Coordinates around the Node
+          {/* Render Real Coordinates */}
+          {view === 'coordinates' && activeNode.goals.map((goal, i) => {
+            const angle = (i / (activeNode.goals.length || 1)) * 2 * Math.PI;
+            // Spread them across multiple orbits if there are many
+            const radius = 60 + (i % 3) * 30; 
+            const cx = CENTER + radius * Math.cos(angle);
+            const cy = CENTER + radius * Math.sin(angle);
+            const cRadius = 4 + (goal.value / 10) * 4; 
 
             return (
-              <G key={node.id}>
-                {/* Gravity tether from center to node */}
-                <Line x1={CENTER} y1={CENTER} x2={nx} y2={ny} stroke={node.color} strokeWidth={1} opacity={0.2} />
-
-                {/* Coordinate Orbit Path around the Node */}
-                <Circle cx={nx} cy={ny} r={COORD_RADIUS} stroke={node.color} strokeWidth={1} fill="none" opacity={0.2} strokeDasharray="2 4" />
-
-                {/* Draw Coordinates (Moons) */}
-                {node.goals.map((goal, j) => {
-                  // Offset each moon's orbit so they don't align perfectly with the node's angle
-                  const cAngle = (j / (node.goals.length || 1)) * 2 * Math.PI + nodeAngle + 0.5;
-                  const cx = nx + COORD_RADIUS * Math.cos(cAngle);
-                  const cy = ny + COORD_RADIUS * Math.sin(cAngle);
-                  const cRadius = 3 + (goal.value / 10) * 4; // 3 to 7
-
-                  return (
-                    <G key={goal.id}>
-                      {/* Tether from Node to Coordinate */}
-                      <Line x1={nx} y1={ny} x2={cx} y2={cy} stroke={node.color} strokeWidth={1} opacity={0.3} />
-                      
-                      {/* Coordinate Moon */}
-                      <Circle cx={cx} cy={cy} r={cRadius} fill={theme.textMuted} />
-
-                      {/* If zoomed to Actions view, draw Action particles around the Coordinate */}
-                      {view === 'actions' && (
-                        <G>
-                          {/* Inner orbital ring for actions */}
-                          <Circle cx={cx} cy={cy} r={cRadius + 8} stroke={node.color} strokeWidth={1} fill="none" opacity={0.3} />
-                          
-                          {goal.actions.map((act, k) => {
-                            const aRadius = cRadius + 8;
-                            const aAngle = (k / (goal.actions.length || 1)) * 2 * Math.PI;
-                            const ax = cx + aRadius * Math.cos(aAngle);
-                            const ay = cy + aRadius * Math.sin(aAngle);
-                            const isCompleted = act.completed;
-
-                            return (
-                              <Circle 
-                                key={act.id} 
-                                cx={ax} 
-                                cy={ay} 
-                                r={isCompleted ? 2 : 1.5} 
-                                fill={isCompleted ? node.color : theme.divider} 
-                                opacity={isCompleted ? 1 : 0.6} 
-                              />
-                            );
-                          })}
-                        </G>
-                      )}
-                    </G>
-                  );
-                })}
-
-                {/* Draw the Node Planet (drawn last to be on top of lines) */}
-                <Circle cx={nx} cy={ny} r={nodeRadius + 6} fill={node.color} opacity={0.2} />
-                <Circle cx={nx} cy={ny} r={nodeRadius} fill={node.color} />
+              <G key={goal.id}>
+                {/* Orbit Path */}
+                <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
+                <Line x1={CENTER} y1={CENTER} x2={cx} y2={cy} stroke={activeNode.color} strokeWidth={1} opacity={0.2} />
+                
+                {/* Pulsing Aura */}
+                <AnimatedCircle 
+                  cx={cx} cy={cy} 
+                  r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [cRadius + 2, cRadius + 6] })} 
+                  fill={activeNode.color} 
+                  opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })} 
+                />
+                
+                {/* Real Coordinate Moon */}
+                <Circle cx={cx} cy={cy} r={cRadius} fill={theme.text} />
               </G>
             );
           })}
+
+          {/* Render Real Actions directly orbiting the Node */}
+          {view === 'actions' && (() => {
+            const allActions = activeNode.goals.flatMap(g => g.actions);
+            return allActions.map((act, i) => {
+              const angle = (i / (allActions.length || 1)) * 2 * Math.PI;
+              const radius = 50 + (i % 4) * 25; 
+              const cx = CENTER + radius * Math.cos(angle);
+              const cy = CENTER + radius * Math.sin(angle);
+              const isCompleted = act.completed;
+
+              return (
+                <G key={act.id}>
+                  {/* Orbit Path */}
+                  <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" opacity={0.05} />
+                  
+                  {/* Pulsing Aura for active actions */}
+                  {isCompleted && (
+                    <AnimatedCircle 
+                      cx={cx} cy={cy} 
+                      r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 6] })} 
+                      fill={activeNode.color} 
+                      opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
+                    />
+                  )}
+                  
+                  <Circle 
+                    cx={cx} 
+                    cy={cy} 
+                    r={isCompleted ? 2.5 : 1.5} 
+                    fill={isCompleted ? activeNode.color : theme.divider} 
+                    opacity={isCompleted ? 1 : 0.6} 
+                  />
+                </G>
+              );
+            });
+          })()}
+
         </Svg>
       </Animated.View>
     </View>

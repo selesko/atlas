@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
-  PanResponder, Animated, Pressable, StyleSheet as RNStyleSheet,
+  PanResponder, Animated, Pressable, StyleSheet as RNStyleSheet, Easing
 } from 'react-native';
 import Svg, {
   Circle, Polygon, G, Rect, Path, Defs,
@@ -57,6 +57,18 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const radarRotation = useRef(new Animated.Value(0)).current;
   const radarScale = useRef(new Animated.Value(1)).current;
   const nodeBreathAnim = useRef(new Animated.Value(0)).current;
+  const zoomAnim = useRef(new Animated.Value(1)).current;
+
+  // Jump Drive Zoom Effect
+  useEffect(() => {
+    zoomAnim.setValue(0.7);
+    Animated.timing(zoomAnim, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [atlasGraphView]);
 
   // Stars
   useEffect(() => {
@@ -195,7 +207,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
           <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow, { backgroundColor: 'transparent', borderBottomColor: theme.divider }]}>
             <View style={styles.atlasScoreBlock}>
               <Text style={[styles.statLabel, { color: theme.textMuted, fontWeight: '800', letterSpacing: 2 }]}>
-                {atlasGraphView === 'radar' ? 'SYSTEM' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
+                {atlasGraphView === 'radar' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
               </Text>
             </View>
             <View style={styles.atlasViewSwitcher}>
@@ -253,8 +265,9 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
               ))}
             </Svg>
 
-            {atlasGraphView === 'radar' && (
-              <>
+            {/* Render Graphic with Jump Drive Zoom Effect */}
+            <Animated.View style={[{ flex: 1 }, { opacity: zoomAnim, transform: [{ scale: zoomAnim }] }]}>
+              {atlasGraphView === 'radar' && (
                 <Pressable style={styles.radarWrapper} onPressIn={handleRadarTouch}>
                   <Animated.View style={[styles.radarRotWrap, radarRotStyle]}>
                     <Svg height={340} width={340} viewBox="0 0 200 200">
@@ -302,12 +315,17 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                     </Svg>
                   </Animated.View>
                 </Pressable>
-              </>
-            )}
+              )}
 
-            {atlasGraphView !== 'radar' && (
-              <CosmicSystemView nodes={nodes} view={atlasGraphView} theme={theme} />
-            )}
+              {atlasGraphView !== 'radar' && (
+                <CosmicSystemView 
+                  nodes={nodes} 
+                  view={atlasGraphView} 
+                  theme={theme} 
+                  activeNodeId={atlasHighlightId} 
+                />
+              )}
+            </Animated.View>
           </View>
 
           <View style={[styles.atlasLegend, { borderTopColor: theme.divider }]}>

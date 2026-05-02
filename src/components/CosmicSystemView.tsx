@@ -25,7 +25,7 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
         toValue: 1,
         duration: 90000, 
         easing: Easing.linear,
-        useNativeDriver: true,
+        useNativeDriver: false,
       })
     ).start();
 

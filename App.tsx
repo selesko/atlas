@@ -391,6 +391,16 @@ export default function App() {
             <AtlasScreen
               guidanceActions={(aiCopilot && aiCopilot !== 'loading' ? aiCopilot : copilotFallback).actions}
               onAction={handleCopilotAction}
+              onOpenCoordinate={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
+              onOpenAction={(nodeId, goalId, actionId) => {
+                const node = nodes.find(n => n.id === nodeId);
+                const goal = node?.goals.find(g => g.id === goalId);
+                const action = goal?.actions.find(a => a.id === actionId);
+                if (action) {
+                  setEditForm({ title: action.title, nodeId, goalId, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '' });
+                  setEditingAction({ nodeId, goalId, actionId });
+                }
+              }}
             />
           )}
           {activeTab === 'Nodes' && (

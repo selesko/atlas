@@ -31,6 +31,8 @@ interface CopilotAction {
 interface AtlasScreenProps {
   guidanceActions: CopilotAction[];
   onAction: (a: CopilotAction) => void;
+  onOpenCoordinate?: (nodeId: string, goalId: string) => void;
+  onOpenAction?: (nodeId: string, goalId: string, actionId: string) => void;
 }
 
 const ACTION_BTN_LABELS: Record<string, string> = {
@@ -43,6 +45,8 @@ const ACTION_BTN_LABELS: Record<string, string> = {
 export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   guidanceActions,
   onAction,
+  onOpenCoordinate,
+  onOpenAction,
 }) => {
   const { nodes, getNodeAvg, themeMode, persona } = useAppStore();
   const theme = useTheme();
@@ -351,25 +355,48 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}` 
                         : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
                     </Text>
+                      <TouchableOpacity 
+                        style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(56, 189, 248, 0.1)', borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.4)', borderRadius: 12, alignSelf: 'flex-start' }}
+                        onPress={() => {
+                          const activeNodeId = atlasHighlightId || nodes[0]?.id;
+                          if (!activeNodeId) return;
+                          
+                          if (selectedEntity.type === 'coordinate') {
+                            onOpenCoordinate?.(activeNodeId, selectedEntity.data.id);
+                          } else {
+                            onOpenAction?.(activeNodeId, selectedEntity.data.__goalId, selectedEntity.data.id);
+                          }
+                          setSelectedEntity(null);
+                        }}
+                      >
+                        <Text style={{ color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
+                          VIEW {selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →
+                        </Text>
+                      </TouchableOpacity>
                   </GlassCard>
                 </Pressable>
               </Pressable>
             )}
           </View>
 
-          <View style={[styles.atlasLegend, { borderTopColor: theme.divider }]}>
-            {nodes.map(n => (
-              <TouchableOpacity
-                key={n.id}
-                style={[styles.legendItem, atlasHighlightId === n.id && styles.legendItemHighlight]}
-                onPress={() => setAtlasHighlightId(prev => prev === n.id ? null : n.id)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.legendDot, { backgroundColor: n.color }]} />
-                <Text style={[styles.legendLabel, { color: theme.textMuted }, atlasHighlightId === n.id && { color: theme.accent }]}>{n.name.toUpperCase()}</Text>
-                <Text style={[styles.legendValue, { color: theme.text }]}>{getNodeAvg(n)}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }}>
+            <Text style={{ color: THEME.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase' }}>
+              SELECT NODE TO FOCUS:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', width: '100%' }}>
+              {nodes.map(n => (
+                <TouchableOpacity
+                  key={n.id}
+                  style={[styles.legendItem, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.03)' }, atlasHighlightId === n.id && styles.legendItemHighlight]}
+                  onPress={() => setAtlasHighlightId(prev => prev === n.id ? null : n.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.legendDot, { backgroundColor: n.color }]} />
+                  <Text style={[styles.legendLabel, { color: theme.textMuted }, atlasHighlightId === n.id && { color: theme.accent }]}>{n.name.toUpperCase()}</Text>
+                  <Text style={[styles.legendValue, { color: theme.text }]}>{getNodeAvg(n)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
       </GlassCard>

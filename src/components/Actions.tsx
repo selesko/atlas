@@ -40,19 +40,19 @@ function touchToValue(cx: number, cy: number, tx: number, ty: number): number {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-interface OrbitalSliderProps {
+interface ActionsProps {
   value: number;        // 1–10
   color: string;        // node color
   size?: number;        // diameter in px (default 200)
   onValueChange: (v: number) => void;
 }
 
-export function OrbitalSlider({
+export function Actions({
   value,
   color,
   size = 200,
   onValueChange,
-}: OrbitalSliderProps) {
+}: ActionsProps) {
   const cx = size / 2;
   const cy = size / 2;
   const R        = size * 0.38;   // orbit radius

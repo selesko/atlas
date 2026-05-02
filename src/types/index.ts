@@ -31,7 +31,7 @@ export interface Node {
 export type CognitiveModel = 'Architect' | 'Strategist' | 'Builder' | 'Analyst';
 export type PeakPeriod = 'MORNING' | 'EVENING';
 export type Persona = 'Engineer' | 'Seeker' | 'Spiritual';
-export type AtlasGraphView = 'radar' | 'coordinates' | 'actions';
+export type AtlasGraphView = 'nodes' | 'coordinates' | 'actions';
 export type ActionFilter = 'ALL' | 'MIND' | 'BODY' | 'HOME' | 'FOCUS';
 export type MotivatorChoice = 'left' | 'right';
 export type MotivatorChoices = Record<string, MotivatorChoice>;

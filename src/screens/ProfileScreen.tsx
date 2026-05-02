@@ -4,7 +4,7 @@ import Svg, { Circle, Path, Line, Polyline, Ellipse } from 'react-native-svg';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '../stores/useAppStore';
 import { useSnapshotStore, RadarSnapshot } from '../stores/useSnapshotStore';
-import { MiniRadar } from '../components/MiniRadar';
+import { Coordinates } from '../components/Coordinates';
 import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME, MOTIVATOR_TENSIONS, PERSONA_DATA } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
@@ -243,7 +243,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
               const triggerNode = snap.nodeScores.find(n => n.nodeId === snap.triggerNodeId);
               return (
                 <TouchableOpacity key={snap.id} style={[styles.logbookCard, { backgroundColor: theme.inputBg, borderColor: theme.divider }]} onPress={() => setSelectedSnapshot(snap)} activeOpacity={0.8}>
-                  <MiniRadar nodes={snap.nodeScores} size={88} />
+                  <Coordinates nodes={snap.nodeScores} size={88} />
                   <View style={styles.logbookCardMeta}>
                     <Text style={[styles.logbookCardDate, { color: theme.text }]}>{dateStr}</Text>
                     <Text style={[styles.logbookCardYear, { color: theme.textMuted }]}>{yearStr}</Text>

@@ -13,7 +13,7 @@ import { FadingBorder } from '../components/FadingBorder';
 import { THEME } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
-import { CosmicSystemView } from '../components/CosmicSystemView';
+import { Radar } from '../components/Radar';
 import { AtlasGraphView, Node } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -50,7 +50,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const { nodes, getNodeAvg, themeMode, persona } = useAppStore();
   const theme = useTheme();
 
-  const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
+  const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('nodes');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<{type: 'node'|'coordinate'|'action', data: any} | null>(null);
   const [explainerOpen, setExplainerOpen] = useState(false);
@@ -87,13 +87,16 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   // Radar rotation
   useEffect(() => {
+    radarRotation.setValue(0);
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(radarRotation, { toValue: 360, duration: 45000, useNativeDriver: false, isInteraction: false }),
-        Animated.timing(radarRotation, { toValue: 0, duration: 0, useNativeDriver: false }),
-      ])
+      Animated.timing(radarRotation, {
+        toValue: 1,
+        duration: 90000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      })
     ).start();
-  }, []);
+  }, [atlasGraphView]);
 
   // Radar pulse scale
   useEffect(() => {
@@ -124,7 +127,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
 
   const radarRotStyle = {
-    transform: [{ rotate: radarRotation.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }],
+    transform: [{ rotate: radarRotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
   };
 
 
@@ -215,11 +218,11 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
           <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow, { backgroundColor: 'transparent', borderBottomColor: theme.divider }]}>
             <View style={styles.atlasScoreBlock}>
               <Text style={[styles.statLabel, { color: theme.textMuted, fontWeight: '800', letterSpacing: 2 }]}>
-                {atlasGraphView === 'radar' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
+                {atlasGraphView === 'nodes' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
               </Text>
             </View>
             <View style={styles.atlasViewSwitcher}>
-              {(['radar', 'coordinates', 'actions'] as const).map(v => {
+              {(['nodes', 'coordinates', 'actions'] as const).map(v => {
                 const c = atlasGraphView === v ? theme.accent : theme.textMuted;
                 return (
                   <TouchableOpacity
@@ -228,21 +231,24 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                     style={[styles.atlasViewTab, atlasGraphView === v && styles.atlasViewTabActive]}
                     activeOpacity={0.8}
                   >
-                    {v === 'radar' && (
+                    {v === 'nodes' && (
                       <Svg width={22} height={22} viewBox="0 0 120 120">
-                        <Circle cx="60" cy="60" r="40" stroke={c} strokeWidth="4" strokeDasharray="8 8" fill="none" opacity={0.8} />
+                        <Circle cx="60" cy="60" r="40" stroke={c} strokeWidth="2" fill="none" opacity={0.25} />
                         <Circle cx="60" cy="60" r="16" fill={c} />
-                        <Circle cx="20" cy="60" r="8" fill={atlasGraphView === 'radar' ? "#A78BFA" : c} />
-                        <Circle cx="80" cy="25" r="10" fill={atlasGraphView === 'radar' ? "#34D399" : c} />
-                        <Circle cx="88" cy="88" r="7" fill={atlasGraphView === 'radar' ? "#F472B6" : c} />
+                        <Circle cx="20" cy="60" r="8" fill={atlasGraphView === 'nodes' ? "#A78BFA" : c} />
+                        <Circle cx="80" cy="25" r="10" fill={atlasGraphView === 'nodes' ? "#34D399" : c} />
+                        <Circle cx="88" cy="88" r="7" fill={atlasGraphView === 'nodes' ? "#F472B6" : c} />
                       </Svg>
                     )}
                     {v === 'coordinates' && (
                       <Svg width={22} height={22} viewBox="0 0 120 120">
-                        <Circle cx="60" cy="60" r="24" fill={c} opacity={0.2} />
-                        <Circle cx="60" cy="60" r="16" fill={c} opacity={0.5} />
-                        <Circle cx="60" cy="60" r="8" fill={c} />
-                        <Path d="M60 20 L60 10 M60 100 L60 110 M20 60 L10 60 M100 60 L110 60" stroke={c} strokeWidth="4" strokeLinecap="round" opacity={0.5} />
+                        <Circle cx="60" cy="60" r="12" fill={c} />
+                        <Line x1="60" y1="60" x2="25" y2="35" stroke={c} strokeWidth="3" opacity={0.5} />
+                        <Circle cx="25" cy="35" r="8" fill={c} opacity={0.8} />
+                        <Line x1="60" y1="60" x2="100" y2="50" stroke={c} strokeWidth="3" opacity={0.5} />
+                        <Circle cx="100" cy="50" r="10" fill={c} opacity={0.8} />
+                        <Line x1="60" y1="60" x2="50" y2="100" stroke={c} strokeWidth="3" opacity={0.5} />
+                        <Circle cx="50" cy="100" r="7" fill={c} opacity={0.8} />
                       </Svg>
                     )}
                     {v === 'actions' && (
@@ -282,7 +288,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
             {/* Render Graphic with Jump Drive Zoom Effect */}
             <Animated.View style={[{ flex: 1 }, { opacity: zoomAnim, transform: [{ scale: zoomAnim }] }]}>
-              {atlasGraphView === 'radar' && (
+              {atlasGraphView === 'nodes' && (
                 <View style={styles.radarWrapper}>
                   <Animated.View style={[styles.radarRotWrap, radarRotStyle]}>
                     <Svg width={340} height={340} viewBox="0 0 340 340" onPress={(e: any) => {
@@ -317,7 +323,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       </Defs>
                       <G transform="translate(170, 170)">
                         <G opacity={isDark ? 0.06 : 0.2}>
-                          {[20, 40, 60, 80].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
+                          {[30, 60, 90, 120].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
                         </G>
                         {(() => {
                           const breathRadius = 9;
@@ -331,11 +337,14 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               {/* Orbits, Radials, and Nodes */}
                               {radarPts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
+                                const isActive = !atlasHighlightId || hi;
+                                const nodeColor = isActive ? p.color : theme.divider;
                                 return (
                                   <G key={i} pointerEvents="none">
-                                    <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.15} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={p.color} />
+                                    {isActive && (
+                                      <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} />
+                                    )}
+                                    <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={nodeColor} opacity={isActive ? 1 : 0.25} />
                                   </G>
                                 );
                               })}
@@ -348,8 +357,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                 </View>
               )}
 
-              {atlasGraphView !== 'radar' && (
-                <CosmicSystemView 
+              {atlasGraphView !== 'nodes' && (
+                <Radar 
                   nodes={nodes} 
                   view={atlasGraphView} 
                   theme={theme} 
@@ -462,9 +471,9 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
               
               {/* Fun Graphic */}
               <View style={{ marginBottom: 24 }}>
-                {atlasGraphView === 'radar' && (
+                {atlasGraphView === 'nodes' && (
                   <Svg width={120} height={120} viewBox="0 0 120 120">
-                    <Circle cx="60" cy="60" r="40" stroke={THEME.accent} strokeWidth="1" strokeDasharray="4 4" fill="none" opacity={0.5} />
+                    <Circle cx="60" cy="60" r="40" stroke={THEME.accent} strokeWidth="1" fill="none" opacity={0.3} />
                     <Circle cx="60" cy="60" r="16" fill={THEME.accent} />
                     <Circle cx="20" cy="60" r="6" fill="#A78BFA" />
                     <Circle cx="80" cy="25" r="8" fill="#34D399" />
@@ -473,10 +482,13 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                 )}
                 {atlasGraphView === 'coordinates' && (
                   <Svg width={120} height={120} viewBox="0 0 120 120">
-                    <Circle cx="60" cy="60" r="24" fill={THEME.accent} opacity={0.2} />
-                    <Circle cx="60" cy="60" r="16" fill={THEME.accent} opacity={0.5} />
-                    <Circle cx="60" cy="60" r="8" fill={THEME.accent} />
-                    <Path d="M60 20 L60 10 M60 100 L60 110 M20 60 L10 60 M100 60 L110 60" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" opacity={0.5} />
+                    <Circle cx="60" cy="60" r="14" fill={THEME.accent} />
+                    <Line x1="60" y1="60" x2="25" y2="35" stroke={THEME.accent} strokeWidth="2" opacity={0.5} />
+                    <Circle cx="25" cy="35" r="10" fill={THEME.accent} opacity={0.8} />
+                    <Line x1="60" y1="60" x2="100" y2="50" stroke={THEME.accent} strokeWidth="2" opacity={0.5} />
+                    <Circle cx="100" cy="50" r="12" fill={THEME.accent} opacity={0.8} />
+                    <Line x1="60" y1="60" x2="50" y2="100" stroke={THEME.accent} strokeWidth="2" opacity={0.5} />
+                    <Circle cx="50" cy="100" r="9" fill={THEME.accent} opacity={0.8} />
                   </Svg>
                 )}
                 {atlasGraphView === 'actions' && (
@@ -492,11 +504,11 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
               </View>
 
               <Text style={{ color: 'white', fontSize: 20, fontWeight: '800', letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase', textAlign: 'center' }}>
-                {atlasGraphView === 'radar' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
+                {atlasGraphView === 'nodes' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
               </Text>
 
               <Text style={{ color: THEME.textDim, fontSize: 14, lineHeight: 22, textAlign: 'center', marginBottom: 24 }}>
-                {atlasGraphView === 'radar' && 'Nodes are the foundational pillars of your life. They represent the high-level areas you are focused on optimizing, tracking, and bringing into balance.'}
+                {atlasGraphView === 'nodes' && 'Nodes are the foundational pillars of your life. They represent the high-level areas you are focused on optimizing, tracking, and bringing into balance.'}
                 {atlasGraphView === 'coordinates' && 'Coordinates are the specific, measurable goals orbiting a Node. They define the intended outcome and structural integrity of each pillar.'}
                 {atlasGraphView === 'actions' && 'Actions are the concrete habits, tasks, and routines you deploy. By completing actions, you maintain or improve the alignment of your Coordinates.'}
               </Text>

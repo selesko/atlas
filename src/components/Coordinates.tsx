@@ -3,12 +3,12 @@ import Svg, { Circle, G, Polygon, Circle as SvgCircle } from 'react-native-svg';
 import { SnapshotNode } from '../stores/useSnapshotStore';
 import { THEME } from '../constants/theme';
 
-interface MiniRadarProps {
+interface CoordinatesProps {
   nodes: SnapshotNode[];
   size?: number;
 }
 
-export const MiniRadar: React.FC<MiniRadarProps> = ({ nodes, size = 80 }) => {
+export const Coordinates: React.FC<CoordinatesProps> = ({ nodes, size = 80 }) => {
   const center = size / 2;
   const maxR = center * 0.78;
 

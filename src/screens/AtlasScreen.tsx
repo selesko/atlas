@@ -339,7 +339,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                                 return (
                                   <G key={i} pointerEvents="none">
                                     <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
-                                    <Line x1={0} y1={0} x2={p.x} y2={p.y} stroke={p.color} strokeWidth={1} opacity={0.15} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
                                   </G>

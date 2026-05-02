@@ -338,13 +338,16 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
             </Animated.View>
 
             {/* Interactive Detail Modal for Cosmic View */}
-            {selectedEntity && (
+            {selectedEntity && (() => {
+              const activeNodeForColor = nodes.find(n => n.id === (atlasHighlightId || nodes[0]?.id));
+              const entityColor = selectedEntity.type === 'node' ? selectedEntity.data.color : activeNodeForColor?.color || THEME.accent;
+              return (
               <Pressable 
                 style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'flex-end', padding: 16 }]} 
                 onPress={() => setSelectedEntity(null)}
               >
                 <Pressable onPress={(e) => e.stopPropagation()}>
-                  <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: 'rgba(56, 189, 248, 0.4)', borderWidth: 1, borderRadius: 24, shadowColor: THEME.accent, shadowOpacity: 0.15, shadowRadius: 15 }}>
+                  <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: entityColor, borderWidth: 1, borderRadius: 24, shadowColor: entityColor, shadowOpacity: 0.25, shadowRadius: 15 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }}>
                         {selectedEntity.type === 'node' ? selectedEntity.data.name.toUpperCase() : selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
@@ -361,7 +364,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
                     </Text>
                       <TouchableOpacity 
-                        style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(56, 189, 248, 0.1)', borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.4)', borderRadius: 12, alignSelf: 'flex-start' }}
+                        style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: `${entityColor}1A`, borderWidth: 1, borderColor: `${entityColor}66`, borderRadius: 12, alignSelf: 'flex-start' }}
                         onPress={() => {
                           const activeNodeId = atlasHighlightId || nodes[0]?.id;
                           if (!activeNodeId) return;
@@ -377,14 +380,14 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                           setSelectedEntity(null);
                         }}
                       >
-                        <Text style={{ color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
+                        <Text style={{ color: entityColor, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
                           {selectedEntity.type === 'node' ? 'CLOSE FOCUS' : `VIEW ${selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →`}
                         </Text>
                       </TouchableOpacity>
                   </GlassCard>
                 </Pressable>
               </Pressable>
-            )}
+            );})()}
           </View>
 
           <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }}>

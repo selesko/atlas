@@ -11,9 +11,10 @@ interface CosmicSystemViewProps {
   view: AtlasGraphView; // 'coordinates' | 'actions'
   theme: ThemeTokens;
   activeNodeId: string | null;
+  onEntityPress?: (type: 'coordinate' | 'action', data: any) => void;
 }
 
-export function CosmicSystemView({ nodes, view, theme, activeNodeId }: CosmicSystemViewProps) {
+export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPress }: CosmicSystemViewProps) {
   // Slow continuous rotation
   const spinValue = useRef(new Animated.Value(0)).current;
   const pulseValue = useRef(new Animated.Value(0)).current;
@@ -98,16 +99,20 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId }: CosmicSys
                 <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
                 <Line x1={CENTER} y1={CENTER} x2={cx} y2={cy} stroke={activeNode.color} strokeWidth={1} opacity={0.2} />
                 
-                {/* Pulsing Aura */}
-                <AnimatedCircle 
-                  cx={cx} cy={cy} 
-                  r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [cRadius + 2, cRadius + 6] })} 
-                  fill={activeNode.color} 
-                  opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })} 
-                />
-                
-                {/* Real Coordinate Moon */}
-                <Circle cx={cx} cy={cy} r={cRadius} fill={theme.text} />
+                <G onPress={() => onEntityPress?.('coordinate', goal)}>
+                  {/* Pulsing Aura */}
+                  <AnimatedCircle 
+                    cx={cx} cy={cy} 
+                    r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [cRadius + 2, cRadius + 14] })} 
+                    fill={activeNode.color} 
+                    opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })} 
+                  />
+                  
+                  {/* Real Coordinate Moon */}
+                  <Circle cx={cx} cy={cy} r={cRadius} fill={activeNode.color} />
+                  {/* Invisible Hitbox for easier tapping */}
+                  <Circle cx={cx} cy={cy} r={24} fill="transparent" />
+                </G>
               </G>
             );
           })}
@@ -127,23 +132,27 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId }: CosmicSys
                   {/* Orbit Path */}
                   <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" opacity={0.05} />
                   
-                  {/* Pulsing Aura for active actions */}
-                  {isCompleted && (
-                    <AnimatedCircle 
-                      cx={cx} cy={cy} 
-                      r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 6] })} 
-                      fill={activeNode.color} 
-                      opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
+                  <G onPress={() => onEntityPress?.('action', act)}>
+                    {/* Pulsing Aura for active actions */}
+                    {isCompleted && (
+                      <AnimatedCircle 
+                        cx={cx} cy={cy} 
+                        r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 10] })} 
+                        fill={activeNode.color} 
+                        opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
+                      />
+                    )}
+                    
+                    <Circle 
+                      cx={cx} 
+                      cy={cy} 
+                      r={isCompleted ? 3 : 2} 
+                      fill={isCompleted ? activeNode.color : theme.divider} 
+                      opacity={isCompleted ? 1 : 0.6} 
                     />
-                  )}
-                  
-                  <Circle 
-                    cx={cx} 
-                    cy={cy} 
-                    r={isCompleted ? 2.5 : 1.5} 
-                    fill={isCompleted ? activeNode.color : theme.divider} 
-                    opacity={isCompleted ? 1 : 0.6} 
-                  />
+                    {/* Invisible Hitbox for easier tapping */}
+                    <Circle cx={cx} cy={cy} r={20} fill="transparent" />
+                  </G>
                 </G>
               );
             });

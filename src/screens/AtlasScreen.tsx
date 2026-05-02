@@ -49,6 +49,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<{type: 'coordinate'|'action', data: any} | null>(null);
   const [radarModalOpen, setRadarModalOpen] = useState(false);
   const [stars, setStars] = useState<Array<{ cx: number; cy: number; r: number; op: number }>>([]);
   const [radarPulseScale, setRadarPulseScale] = useState(1);
@@ -61,6 +62,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   // Jump Drive Zoom Effect
   useEffect(() => {
+    setSelectedEntity(null);
     zoomAnim.setValue(0.7);
     Animated.timing(zoomAnim, {
       toValue: 1,
@@ -323,9 +325,36 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                   view={atlasGraphView} 
                   theme={theme} 
                   activeNodeId={atlasHighlightId} 
+                  onEntityPress={(type, data) => setSelectedEntity({ type, data })}
                 />
               )}
             </Animated.View>
+
+            {/* Interactive Detail Modal for Cosmic View */}
+            {selectedEntity && (
+              <Pressable 
+                style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'flex-end', padding: 16 }]} 
+                onPress={() => setSelectedEntity(null)}
+              >
+                <Pressable onPress={(e) => e.stopPropagation()}>
+                  <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: 'rgba(56, 189, 248, 0.4)', borderWidth: 1, borderRadius: 24, shadowColor: THEME.accent, shadowOpacity: 0.15, shadowRadius: 15 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }}>
+                        {selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
+                      </Text>
+                      <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{top:15,bottom:15,left:15,right:15}}>
+                        <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>CLOSE</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={{ color: theme.textMuted, fontSize: 13, letterSpacing: 1, fontWeight: '600' }}>
+                      {selectedEntity.type === 'coordinate' 
+                        ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}` 
+                        : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
+                    </Text>
+                  </GlassCard>
+                </Pressable>
+              </Pressable>
+            )}
           </View>
 
           <View style={[styles.atlasLegend, { borderTopColor: theme.divider }]}>

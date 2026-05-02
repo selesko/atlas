@@ -69,10 +69,52 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
     });
   }, [view]);
 
+  const handleSvgPress = (e: any) => {
+    const locX = e.nativeEvent.locationX;
+    const locY = e.nativeEvent.locationY;
+    
+    let closestEntity: any = null;
+    let closestDist = 40; // Max click radius (40px)
+    let type: 'coordinate' | 'action' = 'coordinate';
+
+    if (view === 'coordinates') {
+      activeNode.goals.forEach((goal, i) => {
+        const angle = (i / (activeNode.goals.length || 1)) * 2 * Math.PI;
+        const radius = 60 + (i % 3) * 30; 
+        const cx = CENTER + radius * Math.cos(angle);
+        const cy = CENTER + radius * Math.sin(angle);
+        const dist = Math.sqrt(Math.pow(cx - locX, 2) + Math.pow(cy - locY, 2));
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestEntity = goal;
+          type = 'coordinate';
+        }
+      });
+    } else if (view === 'actions') {
+      const allActions = activeNode.goals.flatMap(g => g.actions.map(a => ({ ...a, __goalId: g.id })));
+      allActions.forEach((act, i) => {
+        const angle = (i / (allActions.length || 1)) * 2 * Math.PI;
+        const radius = 50 + (i % 4) * 25; 
+        const cx = CENTER + radius * Math.cos(angle);
+        const cy = CENTER + radius * Math.sin(angle);
+        const dist = Math.sqrt(Math.pow(cx - locX, 2) + Math.pow(cy - locY, 2));
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestEntity = act;
+          type = 'action';
+        }
+      });
+    }
+
+    if (closestEntity && onEntityPress) {
+      onEntityPress(type, closestEntity);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Animated.View style={{ transform: [{ rotate: spin }] }}>
-        <Svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}>
+        <Svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} onPress={handleSvgPress}>
           
           {/* Draw Fake Background Elements */}
           {fakeDots.map((d, i) => (
@@ -99,20 +141,17 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
                 <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
                 <Line x1={CENTER} y1={CENTER} x2={cx} y2={cy} stroke={activeNode.color} strokeWidth={1} opacity={0.2} />
                 
-                <G onPress={() => onEntityPress?.('coordinate', goal)}>
-                  {/* Pulsing Aura */}
-                  <AnimatedCircle 
-                    cx={cx} cy={cy} 
-                    r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [cRadius + 2, cRadius + 14] })} 
-                    fill={activeNode.color} 
-                    opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })} 
-                  />
-                  
-                  {/* Real Coordinate Moon */}
-                  <Circle cx={cx} cy={cy} r={cRadius} fill={activeNode.color} />
-                  {/* Invisible Hitbox for easier tapping */}
-                  <Circle cx={cx} cy={cy} r={24} fill="transparent" />
-                </G>
+                {/* Pulsing Aura */}
+                <AnimatedCircle 
+                  cx={cx} cy={cy} 
+                  r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [cRadius + 2, cRadius + 14] })} 
+                  fill={activeNode.color} 
+                  opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })} 
+                  pointerEvents="none"
+                />
+                
+                {/* Real Coordinate Moon */}
+                <Circle cx={cx} cy={cy} r={cRadius} fill={activeNode.color} pointerEvents="none" />
               </G>
             );
           })}
@@ -132,27 +171,25 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
                   {/* Orbit Path */}
                   <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" opacity={0.05} />
                   
-                  <G onPress={() => onEntityPress?.('action', act)}>
-                    {/* Pulsing Aura for active actions */}
-                    {isCompleted && (
-                      <AnimatedCircle 
-                        cx={cx} cy={cy} 
-                        r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 10] })} 
-                        fill={activeNode.color} 
-                        opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
-                      />
-                    )}
-                    
-                    <Circle 
-                      cx={cx} 
-                      cy={cy} 
-                      r={isCompleted ? 3 : 2} 
-                      fill={isCompleted ? activeNode.color : theme.divider} 
-                      opacity={isCompleted ? 1 : 0.6} 
+                  {/* Pulsing Aura for active actions */}
+                  {isCompleted && (
+                    <AnimatedCircle 
+                      cx={cx} cy={cy} 
+                      r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 10] })} 
+                      fill={activeNode.color} 
+                      opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
+                      pointerEvents="none"
                     />
-                    {/* Invisible Hitbox for easier tapping */}
-                    <Circle cx={cx} cy={cy} r={20} fill="transparent" />
-                  </G>
+                  )}
+                  
+                  <Circle 
+                    cx={cx} 
+                    cy={cy} 
+                    r={isCompleted ? 3 : 2} 
+                    fill={isCompleted ? activeNode.color : theme.divider} 
+                    opacity={isCompleted ? 1 : 0.6} 
+                    pointerEvents="none"
+                  />
                 </G>
               );
             });

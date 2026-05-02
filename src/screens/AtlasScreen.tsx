@@ -53,7 +53,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
-  const [selectedEntity, setSelectedEntity] = useState<{type: 'coordinate'|'action', data: any} | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<{type: 'node'|'coordinate'|'action', data: any} | null>(null);
   const [radarModalOpen, setRadarModalOpen] = useState(false);
   const [stars, setStars] = useState<Array<{ cx: number; cy: number; r: number; op: number }>>([]);
   const [radarPulseScale, setRadarPulseScale] = useState(1);
@@ -307,10 +307,14 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               {pts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
                                 return (
-                                  <G key={i} onPress={() => setAtlasHighlightId(prev => prev === p.id ? null : p.id)}>
-                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 4 : breathRadius} fill={`url(#glow-${p.id})`} opacity={0.6 + nodeBreathValue * 0.4} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? 4 : 3.5} fill={p.color} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? 2 : 1.5} fill="#FFFFFF" opacity={0.9} />
+                                  <G key={i} onPress={() => {
+                                    setAtlasHighlightId(p.id);
+                                    const fullNode = nodes.find(n => n.id === p.id);
+                                    if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
+                                  }}>
+                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6 + nodeBreathValue * 0.4} />
+                                    <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
+                                    <Circle cx={p.x} cy={p.y} r={hi ? 4 : 3} fill="#FFFFFF" opacity={0.9} />
                                   </G>
                                 );
                               })}
@@ -344,14 +348,16 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                   <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: 'rgba(56, 189, 248, 0.4)', borderWidth: 1, borderRadius: 24, shadowColor: THEME.accent, shadowOpacity: 0.15, shadowRadius: 15 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }}>
-                        {selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
+                        {selectedEntity.type === 'node' ? selectedEntity.data.name.toUpperCase() : selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
                       </Text>
                       <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{top:15,bottom:15,left:15,right:15}}>
                         <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>CLOSE</Text>
                       </TouchableOpacity>
                     </View>
                     <Text style={{ color: theme.textMuted, fontSize: 13, letterSpacing: 1, fontWeight: '600' }}>
-                      {selectedEntity.type === 'coordinate' 
+                      {selectedEntity.type === 'node' 
+                        ? `SCORE: ${getNodeAvg(selectedEntity.data)}   •   COORDINATES: ${selectedEntity.data.goals.length}` 
+                        : selectedEntity.type === 'coordinate' 
                         ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}` 
                         : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
                     </Text>
@@ -361,7 +367,10 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                           const activeNodeId = atlasHighlightId || nodes[0]?.id;
                           if (!activeNodeId) return;
                           
-                          if (selectedEntity.type === 'coordinate') {
+                          if (selectedEntity.type === 'node') {
+                            // Already focused on the node via setAtlasHighlightId, maybe just close modal or navigate
+                            setSelectedEntity(null);
+                          } else if (selectedEntity.type === 'coordinate') {
                             onOpenCoordinate?.(activeNodeId, selectedEntity.data.id);
                           } else {
                             onOpenAction?.(activeNodeId, selectedEntity.data.__goalId, selectedEntity.data.id);
@@ -370,7 +379,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         }}
                       >
                         <Text style={{ color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
-                          VIEW {selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →
+                          {selectedEntity.type === 'node' ? 'CLOSE FOCUS' : `VIEW ${selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →`}
                         </Text>
                       </TouchableOpacity>
                   </GlassCard>

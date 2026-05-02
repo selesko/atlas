@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import Svg, {
   Circle, Polygon, G, Rect, Path, Defs,
-  RadialGradient, Stop, Line,
+  RadialGradient, Stop, Line, LinearGradient,
 } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAppStore } from '../stores/useAppStore';
@@ -139,6 +139,12 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   // Derived values
   const systemBalance = (nodes.reduce((acc, n) => acc + parseFloat(getNodeAvg(n)), 0) / (nodes.length || 1)).toFixed(1);
+
+  const radarPts = useMemo(() => nodes.map((n, i) => {
+    const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
+    const r = (parseFloat(getNodeAvg(n)) / 10) * 120;
+    return { x: r * Math.cos(angle), y: r * Math.sin(angle), color: n.color, id: n.id, r };
+  }), [nodes]);
 
 
   const TRAJ_CHART_H = 156;
@@ -276,11 +282,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       const locX = e.nativeEvent.locationX;
                       const locY = e.nativeEvent.locationY;
                       let clickedNode = null;
-                      const pts = nodes.map((n, i) => {
-                        const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                        const r = (parseFloat(getNodeAvg(n)) / 10) * 120;
-                        return { x: r * Math.cos(angle) + 170, y: r * Math.sin(angle) + 170, color: n.color, id: n.id };
-                      });
+                      const pts = radarPts.map(p => ({ ...p, x: p.x + 170, y: p.y + 170 }));
                       for (const p of pts) {
                         if (Math.sqrt(Math.pow(p.x - locX, 2) + Math.pow(p.y - locY, 2)) < 40) {
                           clickedNode = p;
@@ -305,26 +307,39 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                             <Stop offset="100%" stopColor={n.color} stopOpacity="0" />
                           </RadialGradient>
                         ))}
+                        {radarPts.map((p1, i) => {
+                          const p2 = radarPts[(i + 1) % radarPts.length];
+                          return (
+                            <LinearGradient key={`grad-${p1.id}-${p2.id}`} id={`grad-${p1.id}-${p2.id}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} gradientUnits="userSpaceOnUse">
+                              <Stop offset="0%" stopColor={p1.color} stopOpacity="1" />
+                              <Stop offset="100%" stopColor={p2.color} stopOpacity="1" />
+                            </LinearGradient>
+                          );
+                        })}
                       </Defs>
                       <G transform="translate(170, 170)">
                         <G opacity={isDark ? 0.06 : 0.2}>
                           {[20, 40, 60, 80].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
                         </G>
                         {(() => {
-                          const pts = nodes.map((n, i) => {
-                            const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                            const r = (parseFloat(getNodeAvg(n)) / 10) * 120;
-                            return { x: r * Math.cos(angle), y: r * Math.sin(angle), color: n.color, id: n.id, r };
-                          });
                           const breathRadius = 9;
                           return (
                             <>
-                              {pts.map((p, i) => {
+                              {/* Gradient connections between adjacent nodes */}
+                              {radarPts.map((p1, i) => {
+                                const p2 = radarPts[(i + 1) % radarPts.length];
+                                return (
+                                  <Line key={`conn-${i}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={`url(#grad-${p1.id}-${p2.id})`} strokeWidth={1.5} opacity={0.6} />
+                                );
+                              })}
+                              
+                              {/* Orbits, Radials, and Nodes */}
+                              {radarPts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
                                 return (
                                   <G key={i} pointerEvents="none">
                                     <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
-                                    <Line x1={0} y1={0} x2={p.x} y2={p.y} stroke={p.color} strokeWidth={1} opacity={0.2} />
+                                    <Line x1={0} y1={0} x2={p.x} y2={p.y} stroke={p.color} strokeWidth={1} opacity={0.15} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
                                   </G>

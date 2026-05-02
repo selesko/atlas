@@ -76,7 +76,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
         style={{
           color: activeColor,
           fontSize: size * 0.34,
-          fontWeight: '200',
+          fontWeight: '600',
           includeFontPadding: false,
         }}
       >

@@ -16,6 +16,7 @@ import {
   deleteAction as syncDeleteAction,
 } from '../services/sync';
 import { useSnapshotStore, RadarSnapshot } from './useSnapshotStore';
+import { calculatePersona } from '../utils/personaCalc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -441,10 +442,11 @@ export const useAppStore = create<AppState>()(
   },
 
   setMotivatorChoices: (choices) => {
-    set({ motivatorChoices: choices });
-    const { session, cognitiveModel, identityNotes, persona, hasCompletedOnboarding } = get();
+    const newPersona = calculatePersona(choices);
+    set({ motivatorChoices: choices, persona: newPersona });
+    const { session, cognitiveModel, identityNotes, hasCompletedOnboarding } = get();
     if (session?.user.id) {
-      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices: choices, identityNotes, persona, hasCompletedOnboarding });
+      upsertProfile(session.user.id, { cognitiveModel, motivatorChoices: choices, identityNotes, persona: newPersona, hasCompletedOnboarding });
     }
   },
 

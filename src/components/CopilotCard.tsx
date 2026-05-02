@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 22,
-    fontWeight: '400',
+    fontWeight: '600',
     lineHeight: 28,
   },
   headerText: {
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   closeBtn: {
     color: '#475569',
     fontSize: 16,
-    fontWeight: '400',
+    fontWeight: '600',
   },
 
   // Last Cycle
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   lastCycleNodeName: {
     color: '#64748B',
-    fontWeight: '400',
+    fontWeight: '600',
   },
   lastCycleScoreRow: {
     flexDirection: 'row',
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   lastCycleScoreNum: {
     color: '#E2E8F0',
     fontSize: 17,
-    fontWeight: '200',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   lastCycleScoreUnit: {
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
   lastCycleDeltaNum: {
     fontSize: 16,
-    fontWeight: '200',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   lastCycleTrendIcon: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 20,
-    fontWeight: '200',
+    fontWeight: '600',
     letterSpacing: 1,
     marginBottom: 2,
   },
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   lineBody: {
     color: '#CBD5E1',
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: '600',
     letterSpacing: 0.2,
     lineHeight: 19,
   },
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#E2E8F0',
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: 0.3,
   },
 });

@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionSub: {
-    fontWeight: '400',
+    fontWeight: '600',
     color: '#303050',
   },
   modelGrid: {

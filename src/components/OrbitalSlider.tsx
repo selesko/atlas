@@ -159,7 +159,7 @@ export function OrbitalSlider({
           justifyContent: 'center',
         }}
       >
-        <Text style={{ color, fontSize: sunR * 1.2, fontWeight: '200' }}>
+        <Text style={{ color, fontSize: sunR * 1.2, fontWeight: '600' }}>
           {value}
         </Text>
       </View>

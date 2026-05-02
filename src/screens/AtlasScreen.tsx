@@ -43,7 +43,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   guidanceActions,
   onAction,
 }) => {
-  const { nodes, getNodeAvg } = useAppStore();
+  const { nodes, getNodeAvg, themeMode, persona } = useAppStore();
   const theme = useTheme();
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
@@ -183,13 +183,17 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
     setRadarModalOpen(true);
   }, []);
 
+  const isDark = themeMode === 'dark';
+
+  const getSystemStatusLabel = () => {
+    if (persona === 'Seeker') return 'CURRENT ALIGNMENT';
+    if (persona === 'Spiritual') return 'INNER HARMONY';
+    return 'SYSTEM STATUS';
+  };
+
   // Derived values
   const systemBalance = (nodes.reduce((acc, n) => acc + parseFloat(getNodeAvg(n)), 0) / (nodes.length || 1)).toFixed(1);
-  const withAvg = nodes.map(n => ({ node: n, avg: parseFloat(getNodeAvg(n)) })).sort((a, b) => b.avg - a.avg);
-  const highest = withAvg[0];
-  const lowest = withAvg[withAvg.length - 1];
-  const driftDelta = highest && lowest && highest.node.id !== lowest.node.id
-    ? (highest.avg - lowest.avg).toFixed(1) : '0';
+
 
   const TRAJ_CHART_H = 156;
   const TRAJ_PLOT_H = 196;
@@ -215,15 +219,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
     return averageData[i0] * (1 - (i - i0)) + averageData[i1] * (i - i0);
   };
 
-  const driftSparkline = [0, 1, 2, 3, 4, 5, 6].map(i => {
-    const vals = trajectoryDataPerNode.map(arr => arr[i]);
-    return vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
-  });
-  const stabilizing = driftSparkline[6] < driftSparkline[0];
-  const arrowColor = stabilizing ? '#22D3EE' : '#F59E0B';
-  const arrowPath = !stabilizing
-    ? 'M 12 4 L 4 14 L 10 14 L 10 22 L 14 22 L 14 14 L 20 14 Z'
-    : 'M 12 20 L 4 10 L 10 10 L 10 2 L 14 2 L 14 10 L 20 10 Z';
+
 
   const buildCurvePath = (pts: Array<{ x: number; y: number }>) => {
     if (pts.length < 2) return '';
@@ -251,7 +247,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
       <GlassCard style={styles.systemManifestCard}>
         <View style={styles.systemManifestPrimaryRow}>
           <View style={styles.systemManifestLeft}>
-            <Text style={[styles.systemManifestBracketLabel, { color: theme.textMuted }]}>SYSTEM STATUS</Text>
+            <Text style={[styles.systemManifestBracketLabel, { color: theme.textMuted }]}>{getSystemStatusLabel()}</Text>
           </View>
           <View style={[styles.systemManifestVLine, { backgroundColor: theme.divider }]} />
           <View style={styles.systemManifestStatusBlock}>
@@ -266,7 +262,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
           {/* Header row with view switcher */}
           <View style={[styles.atlasCardHeader, styles.atlasCardHeaderRow, { backgroundColor: 'transparent', borderBottomColor: theme.divider }]}>
             <View style={styles.atlasScoreBlock}>
-              <Text style={[styles.statLabel, { color: theme.accent }]}>
+              <Text style={[styles.statLabel, { color: theme.textMuted, fontWeight: '800', letterSpacing: 2 }]}>
                 {atlasGraphView === 'radar' ? 'RADAR' : atlasGraphView === 'trajectory' ? 'TRAJECTORY' : 'CONSTELLATION'}
               </Text>
             </View>
@@ -337,8 +333,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         ))}
                       </Defs>
                       <G transform="translate(100, 100)">
-                        <G opacity={0.06}>
-                          {[20, 40, 60, 80].map(r => <Circle key={r} r={r} stroke="#C0C0C0" strokeWidth="0.5" fill="none" />)}
+                        <G opacity={isDark ? 0.06 : 0.2}>
+                          {[20, 40, 60, 80].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
                         </G>
                         {(() => {
                           const pts = nodes.map((n, i) => {
@@ -487,39 +483,20 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         </View>
       </GlassCard>
 
-      {/* Structural Drift */}
-      <FadingBorder style={{ marginBottom: 12 }}>
-        <GlassCard style={styles.deflectionCard}>
-          <View style={styles.deflectionRow}>
-            <View style={styles.deflectionLeft}>
-              <Text style={[styles.deflectionLabel, { color: theme.textMuted }]}>STRUCTURAL DRIFT</Text>
-              <Text style={[styles.deflectionValue, { color: theme.text }]}>{driftDelta === '0' ? '0 PT(S)' : `${driftDelta} PT(S)`}</Text>
-            </View>
-            <View style={[styles.deflectionVLine, { backgroundColor: theme.divider }]} />
-            <View style={styles.deflectionRight}>
-              <Svg width={32} height={32} viewBox="0 0 24 24">
-                <Path d={arrowPath} fill={arrowColor} />
-              </Svg>
-            </View>
-          </View>
-        </GlassCard>
-      </FadingBorder>
 
       {/* Atlas Guidance */}
       {guidanceActions.length > 0 && (
-        <FadingBorder style={{ marginBottom: 20 }}>
-          <GlassCard style={styles.summaryCard}>
-            <Text style={[styles.summaryHeading, { color: theme.textMuted }]}>ATLAS GUIDANCE</Text>
-            {guidanceActions.slice(0, 2).map((act, idx) => (
-              <View key={idx} style={[styles.summarySuggestionSection, { borderColor: theme.glassBorder }, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
-                <Text style={[styles.summarySuggestionLabel, { color: theme.text }]}>{act.label}</Text>
-                <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onAction(act)} activeOpacity={0.8}>
-                  <Text style={[styles.summarySuggestionBtnText, { color: theme.accent }]}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </GlassCard>
-        </FadingBorder>
+        <GlassCard style={[styles.summaryCard, { marginBottom: 20 }]}>
+          <Text style={[styles.summaryHeading, { color: theme.textMuted }]}>ATLAS GUIDANCE</Text>
+          {guidanceActions.slice(0, 2).map((act, idx) => (
+            <View key={idx} style={[styles.summarySuggestionSection, { borderColor: theme.glassBorder }, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
+              <Text style={[styles.summarySuggestionLabel, { color: theme.text }]}>{act.label}</Text>
+              <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onAction(act)} activeOpacity={0.8}>
+                <Text style={[styles.summarySuggestionBtnText, { color: theme.accent }]}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </GlassCard>
       )}
 
       {/* Live radar detail modal */}
@@ -540,14 +517,14 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  systemManifestCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 12, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  systemManifestCard: { borderRadius: 16, padding: 20, marginBottom: 12, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   systemManifestPrimaryRow: { flexDirection: 'row', alignItems: 'stretch' },
   systemManifestLeft: { flex: 1, justifyContent: 'center' },
   systemManifestBracketLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
-  systemManifestBracketValue: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 2 },
+  systemManifestBracketValue: { color: 'white', fontSize: 32, fontWeight: '600', letterSpacing: 2 },
   systemManifestVLine: { width: 0.5, backgroundColor: 'rgba(226,232,240,0.5)', marginHorizontal: 16 },
   systemManifestStatusBlock: { alignItems: 'flex-end', justifyContent: 'center', paddingLeft: 8 },
-  atlasCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  atlasCard: { borderRadius: 16, padding: 20, marginBottom: 20, overflow: 'hidden', position: 'relative', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   atlasCardContent: { alignItems: 'stretch', zIndex: 1 },
   atlasCardHeader: { backgroundColor: 'rgba(0,0,0,0.35)', marginHorizontal: -20, marginTop: -20, paddingTop: 20, paddingHorizontal: 20, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: THEME.cardBorder },
   atlasCardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
@@ -566,17 +543,17 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   legendLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 1, marginRight: 6 },
   legendLabelHighlight: { color: THEME.accent },
-  legendValue: { color: 'white', fontSize: 14, fontWeight: '300' },
+  legendValue: { color: 'white', fontSize: 14, fontWeight: '600' },
   trajectoryPastLogsRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   trajectoryPastLogsLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
-  deflectionCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  deflectionCard: { borderRadius: 16, padding: 20, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   deflectionRow: { flexDirection: 'row', alignItems: 'stretch' },
   deflectionLeft: { flex: 1, justifyContent: 'center' },
   deflectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
-  deflectionValue: { color: 'white', fontSize: 28, fontWeight: '200', letterSpacing: 2 },
+  deflectionValue: { color: 'white', fontSize: 28, fontWeight: '600', letterSpacing: 2 },
   deflectionVLine: { width: 0.5, backgroundColor: 'rgba(226,232,240,0.5)', marginHorizontal: 16 },
   deflectionRight: { alignItems: 'center', justifyContent: 'center', paddingLeft: 8 },
-  summaryCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, overflow: 'hidden', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  summaryCard: { borderRadius: 16, padding: 20, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   summaryHeading: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase', marginTop: 4, marginBottom: 18 },
   summarySuggestionSection: { borderWidth: 1, borderColor: THEME.cardBorder, borderRadius: 10, padding: 14, marginBottom: 12 },
   summarySuggestionLabel: { color: THEME.border, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginBottom: 14 },

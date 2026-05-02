@@ -241,7 +241,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
           <GlassCard style={styles.addActionSheet}>
 
             {/* Node selector */}
-            <Text style={styles.addActionFormLabel}>NODE</Text>
+            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>NODE</Text>
             <View style={styles.addActionNodeRow}>
               {nodes.map((n, i) => {
                 const sel = addActionTarget?.nodeId === n.id;
@@ -252,21 +252,21 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                     onPress={() => { setAddActionTarget({ nodeId: n.id, goalId: n.goals[0]?.id || '' }); setAddActionCoordDropdownOpen(false); }}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.addActionNodeBtnText, sel && { color: n.color }]}>{n.name.toUpperCase()}</Text>
+                    <Text style={[styles.addActionNodeBtnText, { color: sel ? n.color : theme.text }]}>{n.name.toUpperCase()}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
             {/* Coordinate selector */}
-            <Text style={styles.addActionFormLabel}>COORDINATE</Text>
+            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>COORDINATE</Text>
             <View style={styles.addActionDropdownWrap}>
               <TouchableOpacity
-                style={styles.addActionDropdownTrigger}
+                style={[styles.addActionDropdownTrigger, { borderColor: theme.glassBorder }]}
                 onPress={() => addActionTarget?.nodeId && setAddActionCoordDropdownOpen(v => !v)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.addActionDropdownTriggerText} numberOfLines={1}>
+                <Text style={[styles.addActionDropdownTriggerText, { color: theme.text }]} numberOfLines={1}>
                   {addActionTarget?.nodeId
                     ? (nodes.find(n => n.id === addActionTarget.nodeId)?.goals.find(g => g.id === addActionTarget.goalId)?.name || 'Select coordinate')
                     : 'Select a node first'}
@@ -284,7 +284,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                       onPress={() => { setAddActionTarget(addActionTarget ? { ...addActionTarget, goalId: g.id } : null); setAddActionCoordDropdownOpen(false); }}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.addActionCoordChipText, addActionTarget?.goalId === g.id && { color: nodes.find(n => n.id === addActionTarget.nodeId)?.color }]}>{g.name}</Text>
+                      <Text style={[styles.addActionCoordChipText, { color: addActionTarget?.goalId === g.id ? nodes.find(n => n.id === addActionTarget.nodeId)?.color : theme.text }]}>{g.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -292,13 +292,13 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
             </View>
 
             {/* Title input */}
-            <Text style={styles.addActionFormLabel}>TITLE</Text>
+            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>TITLE</Text>
             <TextInput
-              style={styles.addActionInput}
+              style={[styles.addActionInput, { color: theme.text, borderBottomColor: theme.glassBorder }]}
               value={addActionTitle}
               onChangeText={setAddActionTitle}
               placeholder="Action title…"
-              placeholderTextColor={THEME.textDim}
+              placeholderTextColor={theme.textMuted}
               autoFocus
               returnKeyType="done"
               onSubmitEditing={() => {
@@ -318,10 +318,10 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                 onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.addActionCancelText}>CANCEL</Text>
+                <Text style={[styles.addActionCancelText, { color: theme.textMuted }]}>CANCEL</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.addActionSubmit}
+                style={[styles.addActionSubmit, { borderColor: theme.glassBorder }]}
                 onPress={() => {
                   if (addActionTarget && addActionTitle.trim()) {
                     addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim());
@@ -332,7 +332,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.addActionSubmitText}>ADD ACTION</Text>
+                <Text style={[styles.addActionSubmitText, { color: theme.text }]}>ADD ACTION</Text>
               </TouchableOpacity>
             </View>
           </GlassCard>
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
   collapsedBadgeText: { fontSize: 11, fontWeight: '700' },
   nodeIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   nodeIconLetter: { color: 'white', fontSize: 14, fontWeight: '700' },
-  nodeTitle: { fontSize: 20, fontWeight: '200', letterSpacing: 6 },
+  nodeTitle: { fontSize: 20, fontWeight: '600', letterSpacing: 6 },
   nodeIndentRow: { flexDirection: 'row', gap: 14 },
   nodeRail: { width: 2, borderRadius: 1, opacity: 0.35 },
   nodeIndentContent: { flex: 1 },

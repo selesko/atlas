@@ -25,7 +25,7 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn, onSignUp, onSignOut }) => {
   const {
     cognitiveModel, setCognitiveModel,
-    persona, setPersona,
+    persona,
     motivatorChoices, setMotivatorChoices,
     identityNotes, setIdentityNotes,
     devOverride, setDevOverride,
@@ -43,8 +43,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
     setMotivatorChoices({ ...motivatorChoices, [id]: side });
   };
 
-  const [personaModalOpen, setPersonaModalOpen] = useState(false);
-  const [swipeIndex, setSwipeIndex] = useState(PERSONAS.indexOf(persona));
+  // Persona modal state removed, persona is derived from motivators.
   const scrollRef = useRef<ScrollView>(null);
   const [selectedSnapshot, setSelectedSnapshot] = useState<RadarSnapshot | null>(null);
 
@@ -87,11 +86,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
 
       {/* Persona */}
       <GlassCard style={styles.profileCard}>
-      <TouchableOpacity
-        onPress={() => { setSwipeIndex(PERSONAS.indexOf(persona)); setPersonaModalOpen(true); }}
-        activeOpacity={0.85}
-      >
-        <View style={styles.profileSectionHeaderRow}>
+      <View style={styles.profileSectionHeaderRow}>
           <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
             <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <Circle cx="12" cy="7" r="4" fill="none" stroke={theme.textMuted} strokeWidth={1.5} />
@@ -153,103 +148,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
           </Svg>
         </View>
         <Text style={[styles.personaPreviewLine, { color: theme.textSub }]}>{PERSONA_DATA[persona].lines[0]}</Text>
-      </TouchableOpacity>
+        <Text style={[styles.personaPreviewLine, { color: theme.textSub, marginTop: 6, fontSize: 11, fontWeight: '700', letterSpacing: 1, opacity: 0.5 }]}>
+          DETERMINED BY YOUR MOTIVATOR CALIBRATION
+        </Text>
       </GlassCard>
 
-      {/* Persona modal */}
-      <Modal visible={personaModalOpen} animationType="fade" transparent>
-        <View style={styles.personaOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setPersonaModalOpen(false)} activeOpacity={1} />
-          <View style={styles.personaModal}>
-            <Text style={styles.personaModalTitle}>PERSONA</Text>
-            <ScrollView
-              ref={scrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              contentOffset={{ x: swipeIndex * CARD_WIDTH, y: 0 }}
-              onMomentumScrollEnd={e => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH);
-                setSwipeIndex(idx);
-              }}
-              style={{ width: CARD_WIDTH }}
-            >
-              {PERSONAS.map((p) => (
-                <View key={p} style={[styles.personaSlide, { width: CARD_WIDTH }]}>
-                  {/* Line graphic */}
-                  <View style={styles.personaGraphic}>
-                    {p === 'Engineer' && (
-                      <Svg width="100%" height={80} viewBox="0 0 240 80">
-                        <Line x1="0" y1="40" x2="240" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                        <Line x1="40" y1="0" x2="40" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
-                        <Line x1="80" y1="0" x2="80" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
-                        <Line x1="120" y1="0" x2="120" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
-                        <Line x1="160" y1="0" x2="160" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
-                        <Line x1="200" y1="0" x2="200" y2="80" stroke={THEME.accent} strokeWidth="0.5" opacity="0.2" />
-                        <Polyline points="0,40 40,40 40,20 80,20 80,55 120,55 120,15 160,15 160,50 200,50 200,30 240,30" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        <Circle cx="40" cy="20" r="3" fill={THEME.accent} />
-                        <Circle cx="80" cy="55" r="3" fill={THEME.accent} />
-                        <Circle cx="120" cy="15" r="3" fill={THEME.accent} />
-                        <Circle cx="160" cy="50" r="3" fill={THEME.accent} />
-                        <Circle cx="200" cy="30" r="3" fill={THEME.accent} />
-                      </Svg>
-                    )}
-                    {p === 'Seeker' && (
-                      <Svg width="100%" height={80} viewBox="0 0 240 80">
-                        <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                        <Path d="M0,55 C40,55 40,40 80,40 C120,40 120,25 160,20 C200,15 200,30 240,25" fill="none" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" />
-                        <Circle cx="0" cy="55" r="4" fill={THEME.accent} opacity="0.5" />
-                        <Circle cx="80" cy="40" r="4" fill={THEME.accent} opacity="0.7" />
-                        <Circle cx="160" cy="20" r="5" fill={THEME.accent} />
-                        <Circle cx="240" cy="25" r="4" fill={THEME.accent} opacity="0.7" />
-                        <Line x1="80" y1="40" x2="80" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
-                        <Line x1="160" y1="20" x2="160" y2="65" stroke={THEME.accent} strokeWidth="1" opacity="0.25" strokeDasharray="3,3" />
-                      </Svg>
-                    )}
-                    {p === 'Spiritual' && (
-                      <Svg width="100%" height={80} viewBox="0 0 240 80">
-                        <Path d="M0,40 C30,10 60,70 120,40 C180,10 210,70 240,40" fill="none" stroke={THEME.accent} strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
-                        <Path d="M0,50 C30,20 60,80 120,50 C180,20 210,80 240,50" fill="none" stroke={THEME.accent} strokeWidth="1" strokeLinecap="round" opacity="0.2" />
-                        <Circle cx="40" cy="22" r="2.5" fill={THEME.accent} opacity="0.6" />
-                        <Circle cx="90" cy="58" r="2" fill={THEME.accent} opacity="0.5" />
-                        <Circle cx="120" cy="40" r="4" fill={THEME.accent} />
-                        <Circle cx="155" cy="18" r="2.5" fill={THEME.accent} opacity="0.6" />
-                        <Circle cx="200" cy="62" r="2" fill={THEME.accent} opacity="0.5" />
-                        <Line x1="40" y1="22" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                        <Line x1="155" y1="18" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                        <Line x1="90" y1="58" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                        <Line x1="200" y1="62" x2="120" y2="40" stroke={THEME.accent} strokeWidth="0.5" opacity="0.3" />
-                      </Svg>
-                    )}
-                  </View>
-                  <Text style={styles.personaSlideName}>{p.toUpperCase()}</Text>
-                  {PERSONA_DATA[p].lines.map((line, i) => (
-                    <Text key={i} style={[styles.personaSlideLine, i === 0 && { opacity: 1 }, i === 1 && { opacity: 0.7 }, i === 2 && { opacity: 0.5 }]}>{line}</Text>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
-
-            {/* Dots */}
-            <View style={styles.personaDots}>
-              {PERSONAS.map((_, i) => (
-                <View key={i} style={[styles.personaDot, i === swipeIndex && styles.personaDotActive]} />
-              ))}
-            </View>
-
-            {/* Select button */}
-            <TouchableOpacity
-              style={[styles.personaSelectBtn, { borderColor: THEME.accent }]}
-              onPress={() => { setPersona(PERSONAS[swipeIndex]); setPersonaModalOpen(false); }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.personaSelectBtnText, { color: THEME.accent }]}>
-                SELECT {PERSONAS[swipeIndex].toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      
 
       {/* Motivators */}
       <GlassCard style={styles.profileCard}>
@@ -411,7 +315,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
 };
 
 const styles = StyleSheet.create({
-  profileCard: { backgroundColor: THEME.card, marginBottom: 18, borderRadius: 12, overflow: 'hidden', padding: 24, shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  profileCard: { marginBottom: 18, borderRadius: 16, overflow: 'hidden', padding: 24, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   profileSectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   profileSectionIcon: { marginRight: 8 },
   profileSectionLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 },
@@ -463,7 +367,7 @@ const styles = StyleSheet.create({
   systemAccessTier: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
 
   // Account section
-  accountEmail: { color: 'white', fontSize: 15, fontWeight: '500', marginBottom: 6 },
+  accountEmail: { color: 'white', fontSize: 15, fontWeight: '600', marginBottom: 6 },
   accountStatusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   accountStatusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
   accountStatusText: { color: '#22C55E', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },

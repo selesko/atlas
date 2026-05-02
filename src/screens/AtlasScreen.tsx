@@ -89,7 +89,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(radarRotation, { toValue: 360, duration: 90000, useNativeDriver: false, isInteraction: false }),
+        Animated.timing(radarRotation, { toValue: 360, duration: 45000, useNativeDriver: false, isInteraction: false }),
         Animated.timing(radarRotation, { toValue: 0, duration: 0, useNativeDriver: false }),
       ])
     ).start();
@@ -333,6 +333,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                                 const hi = atlasHighlightId === p.id;
                                 return (
                                   <G key={i} pointerEvents="none">
+                                    <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.15} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={p.color} />
                                   </G>

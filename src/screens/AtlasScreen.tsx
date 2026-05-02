@@ -305,10 +305,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       }
                     }}>
                       <Defs>
-                        <RadialGradient id="radarPolygonFill" cx="0" cy="0" r="120" gradientUnits="userSpaceOnUse">
-                          <Stop offset="0%" stopColor={THEME.accent} stopOpacity="0.25" />
-                          <Stop offset="100%" stopColor={THEME.accent} stopOpacity="0.02" />
-                        </RadialGradient>
                         {nodes.map(n => (
                           <RadialGradient key={n.id} id={`glow-${n.id}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
                             <Stop offset="0%" stopColor={n.color} stopOpacity="1" />
@@ -318,15 +314,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                             <Stop offset="100%" stopColor={n.color} stopOpacity="0" />
                           </RadialGradient>
                         ))}
-                        {radarPts.map((p1, i) => {
-                          const p2 = radarPts[(i + 1) % radarPts.length];
-                          return (
-                            <LinearGradient key={`grad-${p1.id}-${p2.id}`} id={`grad-${p1.id}-${p2.id}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} gradientUnits="userSpaceOnUse">
-                              <Stop offset="0%" stopColor={p1.color} stopOpacity="1" />
-                              <Stop offset="100%" stopColor={p2.color} stopOpacity="1" />
-                            </LinearGradient>
-                          );
-                        })}
                       </Defs>
                       <G transform="translate(170, 170)">
                         <G opacity={isDark ? 0.06 : 0.2}>
@@ -336,24 +323,17 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                           const breathRadius = 9;
                           return (
                             <>
-                              {/* Filled polygon for the radar web */}
-                              <Polygon points={radarPts.map(p => `${p.x},${p.y}`).join(' ')} fill="url(#radarPolygonFill)" />
-
-                              {/* Gradient connections between adjacent nodes */}
-                              {radarPts.map((p1, i) => {
-                                const p2 = radarPts[(i + 1) % radarPts.length];
-                                return (
-                                  <Line key={`conn-${i}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={`url(#grad-${p1.id}-${p2.id})`} strokeWidth={1.5} opacity={0.6} />
-                                );
-                              })}
+                              {/* Central Sun */}
+                              <Circle cx={0} cy={0} r={14} fill="#FFFFFF" />
+                              <Circle cx={0} cy={0} r={28} fill="#FFFFFF" opacity={0.15} />
+                              <Circle cx={0} cy={0} r={46} fill="#FFFFFF" opacity={0.05} />
                               
                               {/* Orbits, Radials, and Nodes */}
                               {radarPts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
                                 return (
                                   <G key={i} pointerEvents="none">
-                                    <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 18 : breathRadius + 9} fill={`url(#glow-${p.id})`} opacity={0.6} />
+                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={p.color} />
                                   </G>
                                 );

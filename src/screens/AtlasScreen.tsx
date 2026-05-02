@@ -347,6 +347,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                   theme={theme} 
                   activeNodeId={atlasHighlightId} 
                   onEntityPress={(type, data) => setSelectedEntity({ type, data })}
+                  onEmptyPress={() => setExplainerOpen(true)}
                 />
               )}
             </Animated.View>

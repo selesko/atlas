@@ -314,7 +314,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                                   }}>
                                     <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6 + nodeBreathValue * 0.4} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
-                                    <Circle cx={p.x} cy={p.y} r={hi ? 4 : 3} fill="#FFFFFF" opacity={0.9} />
                                   </G>
                                 );
                               })}

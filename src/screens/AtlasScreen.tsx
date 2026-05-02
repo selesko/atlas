@@ -10,7 +10,6 @@ import Svg, {
 import * as Haptics from 'expo-haptics';
 import { useAppStore } from '../stores/useAppStore';
 import { FadingBorder } from '../components/FadingBorder';
-import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
@@ -54,7 +53,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('radar');
   const [atlasHighlightId, setAtlasHighlightId] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState<{type: 'node'|'coordinate'|'action', data: any} | null>(null);
-  const [radarModalOpen, setRadarModalOpen] = useState(false);
+  const [explainerOpen, setExplainerOpen] = useState(false);
   const [stars, setStars] = useState<Array<{ cx: number; cy: number; r: number; op: number }>>([]);
   const [radarPulseScale, setRadarPulseScale] = useState(1);
   const [nodeBreathValue, setNodeBreathValue] = useState(0);
@@ -128,10 +127,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
     transform: [{ rotate: radarRotation.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }],
   };
 
-  const handleRadarTouch = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRadarModalOpen(true);
-  }, []);
+
 
   const isDark = themeMode === 'dark';
 
@@ -274,9 +270,31 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
             {/* Render Graphic with Jump Drive Zoom Effect */}
             <Animated.View style={[{ flex: 1 }, { opacity: zoomAnim, transform: [{ scale: zoomAnim }] }]}>
               {atlasGraphView === 'radar' && (
-                <Pressable style={styles.radarWrapper} onPressIn={handleRadarTouch}>
+                <View style={styles.radarWrapper}>
                   <Animated.View style={[styles.radarRotWrap, radarRotStyle]}>
-                    <Svg height={340} width={340} viewBox="0 0 200 200">
+                    <Svg width={340} height={340} viewBox="0 0 340 340" onPress={(e: any) => {
+                      const locX = e.nativeEvent.locationX;
+                      const locY = e.nativeEvent.locationY;
+                      let clickedNode = null;
+                      const pts = nodes.map((n, i) => {
+                        const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
+                        const r = (parseFloat(getNodeAvg(n)) / 10) * 80;
+                        return { x: r * Math.cos(angle) + 170, y: r * Math.sin(angle) + 170, color: n.color, id: n.id };
+                      });
+                      for (const p of pts) {
+                        if (Math.sqrt(Math.pow(p.x - locX, 2) + Math.pow(p.y - locY, 2)) < 40) {
+                          clickedNode = p;
+                          break;
+                        }
+                      }
+                      if (clickedNode) {
+                        setAtlasHighlightId(clickedNode.id);
+                        const fullNode = nodes.find(n => n.id === clickedNode.id);
+                        if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
+                      } else {
+                        setExplainerOpen(true);
+                      }
+                    }}>
                       <Defs>
                         {nodes.map(n => (
                           <RadialGradient key={n.id} id={`glow-${n.id}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
@@ -288,7 +306,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                           </RadialGradient>
                         ))}
                       </Defs>
-                      <G transform="translate(100, 100)">
+                      <G transform="translate(170, 170)">
                         <G opacity={isDark ? 0.06 : 0.2}>
                           {[20, 40, 60, 80].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
                         </G>
@@ -307,11 +325,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               {pts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
                                 return (
-                                  <G key={i} onPress={() => {
-                                    setAtlasHighlightId(p.id);
-                                    const fullNode = nodes.find(n => n.id === p.id);
-                                    if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
-                                  }}>
+                                  <G key={i} pointerEvents="none">
                                     <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6 + nodeBreathValue * 0.4} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
                                   </G>
@@ -323,7 +337,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       </G>
                     </Svg>
                   </Animated.View>
-                </Pressable>
+                </View>
               )}
 
               {atlasGraphView !== 'radar' && (
@@ -428,19 +442,66 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         </GlassCard>
       )}
 
-      {/* Live radar detail modal */}
-      <SnapshotDetailModal
-        visible={radarModalOpen}
-        onClose={() => setRadarModalOpen(false)}
-        nodes={nodes.map(n => ({
-          nodeId: n.id,
-          nodeName: n.name,
-          color: n.color,
-          avg: parseFloat(getNodeAvg(n)),
-        }))}
-        label="LIVE"
-        triggerNode={null}
-      />
+      {/* Chart Explainer Modal */}
+      {explainerOpen && (
+        <Pressable 
+          style={[RNStyleSheet.absoluteFill, { zIndex: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.85)', padding: 24 }]} 
+          onPress={() => setExplainerOpen(false)}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <GlassCard style={{ padding: 24, backgroundColor: THEME.card, borderColor: theme.glassBorder, borderWidth: 1, borderRadius: 24, width: '100%', maxWidth: 400, alignItems: 'center' }}>
+              
+              {/* Fun Graphic */}
+              <View style={{ marginBottom: 24 }}>
+                {atlasGraphView === 'radar' && (
+                  <Svg width={120} height={120} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="40" stroke={THEME.accent} strokeWidth="1" strokeDasharray="4 4" fill="none" opacity={0.5} />
+                    <Circle cx="60" cy="60" r="16" fill={THEME.accent} />
+                    <Circle cx="20" cy="60" r="6" fill="#A78BFA" />
+                    <Circle cx="80" cy="25" r="8" fill="#34D399" />
+                    <Circle cx="88" cy="88" r="5" fill="#F472B6" />
+                  </Svg>
+                )}
+                {atlasGraphView === 'coordinates' && (
+                  <Svg width={120} height={120} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="24" fill={THEME.accent} opacity={0.2} />
+                    <Circle cx="60" cy="60" r="16" fill={THEME.accent} opacity={0.5} />
+                    <Circle cx="60" cy="60" r="8" fill={THEME.accent} />
+                    <Path d="M60 20 L60 10 M60 100 L60 110 M20 60 L10 60 M100 60 L110 60" stroke={THEME.accent} strokeWidth="2" strokeLinecap="round" opacity={0.5} />
+                  </Svg>
+                )}
+                {atlasGraphView === 'actions' && (
+                  <Svg width={120} height={120} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="30" stroke={THEME.textDim} strokeWidth="1" fill="none" opacity={0.5} />
+                    <Circle cx="60" cy="30" r="4" fill={THEME.accent} />
+                    <Circle cx="81" cy="81" r="4" fill={THEME.accent} />
+                    <Circle cx="39" cy="81" r="4" fill={THEME.accent} />
+                    <Path d="M57 30 L60 33 L64 27" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <Path d="M78 81 L81 84 L85 78" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  </Svg>
+                )}
+              </View>
+
+              <Text style={{ color: 'white', fontSize: 20, fontWeight: '800', letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase', textAlign: 'center' }}>
+                {atlasGraphView === 'radar' ? 'NODES' : atlasGraphView === 'coordinates' ? 'COORDINATES' : 'ACTIONS'}
+              </Text>
+
+              <Text style={{ color: THEME.textDim, fontSize: 14, lineHeight: 22, textAlign: 'center', marginBottom: 24 }}>
+                {atlasGraphView === 'radar' && 'Nodes are the foundational pillars of your life. They represent the high-level areas you are focused on optimizing, tracking, and bringing into balance.'}
+                {atlasGraphView === 'coordinates' && 'Coordinates are the specific, measurable goals orbiting a Node. They define the intended outcome and structural integrity of each pillar.'}
+                {atlasGraphView === 'actions' && 'Actions are the concrete habits, tasks, and routines you deploy. By completing actions, you maintain or improve the alignment of your Coordinates.'}
+              </Text>
+
+              <TouchableOpacity 
+                style={{ paddingVertical: 12, paddingHorizontal: 32, backgroundColor: 'rgba(56, 189, 248, 0.1)', borderWidth: 1, borderColor: THEME.accent, borderRadius: 12 }}
+                onPress={() => setExplainerOpen(false)}
+              >
+                <Text style={{ color: THEME.accent, fontSize: 13, fontWeight: '800', letterSpacing: 2 }}>UNDERSTOOD</Text>
+              </TouchableOpacity>
+            </GlassCard>
+          </Pressable>
+        </Pressable>
+      )}
     </>
   );
 };

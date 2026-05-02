@@ -12,9 +12,10 @@ interface CosmicSystemViewProps {
   theme: ThemeTokens;
   activeNodeId: string | null;
   onEntityPress?: (type: 'coordinate' | 'action', data: any) => void;
+  onEmptyPress?: () => void;
 }
 
-export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPress }: CosmicSystemViewProps) {
+export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPress, onEmptyPress }: CosmicSystemViewProps) {
   // Slow continuous rotation
   const spinValue = useRef(new Animated.Value(0)).current;
   const pulseValue = useRef(new Animated.Value(0)).current;
@@ -108,6 +109,8 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
 
     if (closestEntity && onEntityPress) {
       onEntityPress(type, closestEntity);
+    } else if (onEmptyPress) {
+      onEmptyPress();
     }
   };
 

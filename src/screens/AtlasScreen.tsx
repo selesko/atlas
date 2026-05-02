@@ -298,6 +298,10 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       }
                     }}>
                       <Defs>
+                        <RadialGradient id="radarPolygonFill" cx="0" cy="0" r="120" gradientUnits="userSpaceOnUse">
+                          <Stop offset="0%" stopColor={THEME.accent} stopOpacity="0.25" />
+                          <Stop offset="100%" stopColor={THEME.accent} stopOpacity="0.02" />
+                        </RadialGradient>
                         {nodes.map(n => (
                           <RadialGradient key={n.id} id={`glow-${n.id}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
                             <Stop offset="0%" stopColor={n.color} stopOpacity="1" />
@@ -325,6 +329,9 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                           const breathRadius = 9;
                           return (
                             <>
+                              {/* Filled polygon for the radar web */}
+                              <Polygon points={radarPts.map(p => `${p.x},${p.y}`).join(' ')} fill="url(#radarPolygonFill)" />
+
                               {/* Gradient connections between adjacent nodes */}
                               {radarPts.map((p1, i) => {
                                 const p2 = radarPts[(i + 1) % radarPts.length];

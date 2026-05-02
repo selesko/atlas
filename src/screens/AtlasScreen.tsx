@@ -229,23 +229,30 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                     activeOpacity={0.8}
                   >
                     {v === 'radar' && (
-                      <Svg width={22} height={22} viewBox="0 0 256 256">
-                        <Path fill={c} d="M230.64 49.36a32 32 0 0 0-45.26 0a31.9 31.9 0 0 0-5.16 6.76L152 48.42a32 32 0 0 0-54.63-23.06a32.06 32.06 0 0 0-5.76 37.41L57.67 93.32a32.05 32.05 0 0 0-40.31 4.05a32 32 0 0 0 42.89 47.41l70 51.36a32 32 0 1 0 47.57-14.69l27.39-77.59q1.38.12 2.76.12a32 32 0 0 0 22.63-54.62Zm-67.87 126.79a32 32 0 0 0-23 7.08l-70-51.36a32.17 32.17 0 0 0-1.34-26.65l33.95-30.55a32 32 0 0 0 45.47-10.81l28.15 7.7a32 32 0 0 0 14.12 27Z" />
+                      <Svg width={22} height={22} viewBox="0 0 120 120">
+                        <Circle cx="60" cy="60" r="40" stroke={c} strokeWidth="4" strokeDasharray="8 8" fill="none" opacity={0.8} />
+                        <Circle cx="60" cy="60" r="16" fill={c} />
+                        <Circle cx="20" cy="60" r="8" fill={atlasGraphView === 'radar' ? "#A78BFA" : c} />
+                        <Circle cx="80" cy="25" r="10" fill={atlasGraphView === 'radar' ? "#34D399" : c} />
+                        <Circle cx="88" cy="88" r="7" fill={atlasGraphView === 'radar' ? "#F472B6" : c} />
                       </Svg>
                     )}
                     {v === 'coordinates' && (
-                      <Svg width={22} height={22} viewBox="0 0 32 32">
-                        {[[16,16],[8,10],[24,10],[8,22],[24,22]].map(([cx, cy], i) => (
-                          <Circle key={i} cx={cx} cy={cy} r={3} fill={c} />
-                        ))}
+                      <Svg width={22} height={22} viewBox="0 0 120 120">
+                        <Circle cx="60" cy="60" r="24" fill={c} opacity={0.2} />
+                        <Circle cx="60" cy="60" r="16" fill={c} opacity={0.5} />
+                        <Circle cx="60" cy="60" r="8" fill={c} />
+                        <Path d="M60 20 L60 10 M60 100 L60 110 M20 60 L10 60 M100 60 L110 60" stroke={c} strokeWidth="4" strokeLinecap="round" opacity={0.5} />
                       </Svg>
                     )}
                     {v === 'actions' && (
-                      <Svg width={22} height={22} viewBox="0 0 32 32">
-                        <Circle cx={16} cy={16} r={10} stroke={c} strokeWidth={2} fill="none" strokeDasharray="4 4" />
-                        <Circle cx={16} cy={6} r={3} fill={c} />
-                        <Circle cx={26} cy={16} r={3} fill={c} />
-                        <Circle cx={16} cy={26} r={3} fill={c} />
+                      <Svg width={22} height={22} viewBox="0 0 120 120">
+                        <Circle cx="60" cy="60" r="30" stroke={c} strokeWidth="4" fill="none" opacity={0.5} />
+                        <Circle cx="60" cy="30" r="6" fill={c} />
+                        <Circle cx="81" cy="81" r="6" fill={c} />
+                        <Circle cx="39" cy="81" r="6" fill={c} />
+                        <Path d="M57 30 L60 33 L64 27" stroke={atlasGraphView === 'actions' ? "#10B981" : c} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                        <Path d="M78 81 L81 84 L85 78" stroke={atlasGraphView === 'actions' ? "#10B981" : c} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                       </Svg>
                     )}
                   </TouchableOpacity>

@@ -172,7 +172,7 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
               return (
                 <G key={act.id}>
                   {/* Orbit Path */}
-                  <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" opacity={0.05} />
+                  <Circle cx={CENTER} cy={CENTER} r={radius} stroke={activeNode.color} strokeWidth={1} fill="none" opacity={0.15} />
                   
                   {/* Pulsing Aura for active actions */}
                   {isCompleted && (
@@ -188,9 +188,9 @@ export function CosmicSystemView({ nodes, view, theme, activeNodeId, onEntityPre
                   <Circle 
                     cx={cx} 
                     cy={cy} 
-                    r={isCompleted ? 3 : 2} 
-                    fill={isCompleted ? activeNode.color : theme.divider} 
-                    opacity={isCompleted ? 1 : 0.6} 
+                    r={isCompleted ? 6 : 4} 
+                    fill={isCompleted ? activeNode.color : theme.textMuted} 
+                    opacity={isCompleted ? 1 : 0.8} 
                     pointerEvents="none"
                   />
                 </G>

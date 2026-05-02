@@ -89,8 +89,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(radarRotation, { toValue: 360, duration: 90000, useNativeDriver: true, isInteraction: false }),
-        Animated.timing(radarRotation, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.timing(radarRotation, { toValue: 360, duration: 90000, useNativeDriver: false, isInteraction: false }),
+        Animated.timing(radarRotation, { toValue: 0, duration: 0, useNativeDriver: false }),
       ])
     ).start();
   }, []);
@@ -278,7 +278,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       let clickedNode = null;
                       const pts = nodes.map((n, i) => {
                         const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                        const r = radarPulseScale * ((parseFloat(getNodeAvg(n)) / 10) * 120 + Math.sin(nodeBreathValue * Math.PI + i) * 6);
+                        const r = (parseFloat(getNodeAvg(n)) / 10) * 120;
                         return { x: r * Math.cos(angle) + 170, y: r * Math.sin(angle) + 170, color: n.color, id: n.id };
                       });
                       for (const p of pts) {
@@ -313,20 +313,19 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         {(() => {
                           const pts = nodes.map((n, i) => {
                             const angle = (i * 2 * Math.PI) / (nodes.length || 1) - Math.PI / 2;
-                            const r = radarPulseScale * ((parseFloat(getNodeAvg(n)) / 10) * 120 + Math.sin(nodeBreathValue * Math.PI + i) * 6);
-                            return { x: r * Math.cos(angle), y: r * Math.sin(angle), color: n.color, id: n.id };
+                            const r = (parseFloat(getNodeAvg(n)) / 10) * 120;
+                            return { x: r * Math.cos(angle), y: r * Math.sin(angle), color: n.color, id: n.id, r };
                           });
-                          const breathRadius = 9 + nodeBreathValue * 6;
+                          const breathRadius = 9;
                           return (
                             <>
-                              <G transform={`scale(${radarPulseScale})`}>
-                                <Polygon points={pts.map(p => `${p.x},${p.y}`).join(' ')} fill="rgba(56, 189, 248, 0.15)" stroke={THEME.accent} strokeWidth="0.9" />
-                              </G>
                               {pts.map((p, i) => {
                                 const hi = atlasHighlightId === p.id;
                                 return (
                                   <G key={i} pointerEvents="none">
-                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6 + nodeBreathValue * 0.4} />
+                                    <Circle cx={0} cy={0} r={p.r} stroke={p.color} strokeWidth={1} fill="none" strokeDasharray="2 6" opacity={0.1} />
+                                    <Line x1={0} y1={0} x2={p.x} y2={p.y} stroke={p.color} strokeWidth={1} opacity={0.2} />
+                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 12 : breathRadius + 6} fill={`url(#glow-${p.id})`} opacity={0.6} />
                                     <Circle cx={p.x} cy={p.y} r={hi ? 8 : 6} fill={p.color} />
                                   </G>
                                 );

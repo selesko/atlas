@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useAppStore } from '../stores/useAppStore';
+import { ActionEffort } from '../types';
 import { THEME } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
+
+
+const EFFORT_LABELS: Record<ActionEffort, string> = { easy: 'E', medium: 'M', heavy: 'H' };
+const EFFORT_COLORS: Record<ActionEffort, string> = { easy: 'rgba(255,255,255,0.25)', medium: 'rgba(255,255,255,0.5)', heavy: 'rgba(255,255,255,0.85)' };
+
 
 interface ActionsScreenProps {
   addActionOpen: boolean;
@@ -48,6 +54,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
 
   const [addActionTitle, setAddActionTitle] = useState('');
   const [addActionCoordDropdownOpen, setAddActionCoordDropdownOpen] = useState(false);
+  const [addActionEffort, setAddActionEffort] = useState<ActionEffort>('easy');
   const { addAction } = useAppStore();
 
   const isFocusActive = activeFilters.has('FOCUS');
@@ -59,7 +66,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
     coords: n.goals.map(g => ({
       goalId: g.id,
       coordinateName: g.name,
-      actions: isFocusActive ? g.actions.filter(a => a.isPriority) : g.actions,
+      actions: (isFocusActive ? g.actions.filter(a => a.isPriority) : g.actions).filter(a => !a.archived),
     })).filter(c => c.actions.length > 0),
   })).filter(ng => ng.coords.length > 0);
 
@@ -149,56 +156,60 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                     <Text style={[styles.coordLabel, { color: node.color }]}>{coord.coordinateName.toUpperCase()}</Text>
                     {[...coord.actions].sort((a, b) => sortOrder(a) - sortOrder(b)).map(a => {
                       const pri = !!a.isPriority;
+                      const effort = a.effort ?? 'easy';
                       return (
-                        <TouchableOpacity
-                          key={a.id}
-                          style={[styles.actionCardOuter, pri && styles.actionCardPriority]}
-                          onPress={() => onOpenEditAction(node.id, coord.goalId, a.id)}
-                          activeOpacity={0.85}
-                        >
-                          <GlassCard style={[styles.actionCard, { borderColor: node.color + '33' }]}>
-                            <View style={styles.actionCardBody}>
-                              <View style={styles.actionRow}>
-                                <TouchableOpacity
-                                  style={styles.actionFocusBtn}
-                                  onPress={() => togglePriority(node.id, coord.goalId, a.id)}
-                                  activeOpacity={0.8}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Svg width={18} height={18} viewBox="0 0 24 24">
-                                    {pri ? (
-                                      <Path fill={theme.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                    ) : (
-                                      <Path fill="none" stroke={theme.textMuted} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                    )}
-                                  </Svg>
-                                </TouchableOpacity>
-                                <View style={styles.actionTitleBlock}>
-                                  <Text style={[styles.actionTitle, { color: theme.text }, a.completed && styles.actionTitleStrike, a.completed && { opacity: 0.4 }]}>{a.title}</Text>
-                                </View>
-                                <View style={styles.actionRightBlock}>
-                                  {pri && <Text style={[styles.actionPriorityLabel, { color: theme.accent }]}>PRIORITY</Text>}
+                          <TouchableOpacity
+                            key={a.id}
+                            style={[styles.actionCardOuter, pri && styles.actionCardPriority]}
+                            onPress={() => onOpenEditAction(node.id, coord.goalId, a.id)}
+                            activeOpacity={0.85}
+                          >
+                            <GlassCard style={[styles.actionCard, { borderColor: node.color + '33' }]}>
+                              <View style={styles.actionCardBody}>
+                                <View style={styles.actionRow}>
                                   <TouchableOpacity
-                                    onPress={() => toggleAction(node.id, coord.goalId, a.id)}
+                                    style={styles.actionFocusBtn}
+                                    onPress={() => togglePriority(node.id, coord.goalId, a.id)}
                                     activeOpacity={0.8}
-                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                   >
-                                    <Svg width={22} height={22} viewBox="0 0 24 24">
-                                      {a.completed ? (
-                                        <>
-                                          <Circle cx="12" cy="12" r="10" fill={node.color} />
-                                          <Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                        </>
+                                    <Svg width={18} height={18} viewBox="0 0 24 24">
+                                      {pri ? (
+                                        <Path fill={theme.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                       ) : (
-                                        <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                                        <Path fill="none" stroke={theme.textMuted} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                       )}
                                     </Svg>
                                   </TouchableOpacity>
+                                  <View style={styles.actionTitleBlock}>
+                                    <Text style={[styles.actionTitle, { color: theme.text }, a.completed && styles.actionTitleStrike, a.completed && { opacity: 0.4 }]}>{a.title}</Text>
+                                  </View>
+                                  <View style={styles.actionRightBlock}>
+                                    {pri && <Text style={[styles.actionPriorityLabel, { color: theme.accent }]}>PRIORITY</Text>}
+                                    <View style={[styles.effortBadge, { borderColor: EFFORT_COLORS[effort] }]}>
+                                      <Text style={[styles.effortBadgeText, { color: EFFORT_COLORS[effort] }]}>{EFFORT_LABELS[effort]}</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                      onPress={() => toggleAction(node.id, coord.goalId, a.id)}
+                                      activeOpacity={0.8}
+                                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    >
+                                      <Svg width={22} height={22} viewBox="0 0 24 24">
+                                        {a.completed ? (
+                                          <>
+                                            <Circle cx="12" cy="12" r="10" fill={node.color} />
+                                            <Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                          </>
+                                        ) : (
+                                          <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                                        )}
+                                      </Svg>
+                                    </TouchableOpacity>
+                                  </View>
                                 </View>
                               </View>
-                            </View>
-                          </GlassCard>
-                        </TouchableOpacity>
+                            </GlassCard>
+                          </TouchableOpacity>
                       );
                     })}
                     {/* Inline add action */}
@@ -227,7 +238,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
         visible={addActionOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); }}
+        onRequestClose={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); }}
       >
         <KeyboardAvoidingView
           style={styles.addActionOverlay}
@@ -235,7 +246,7 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
         >
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
-            onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); }}
+            onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); }}
             activeOpacity={1}
           />
           <GlassCard style={styles.addActionSheet}>
@@ -303,19 +314,36 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
               returnKeyType="done"
               onSubmitEditing={() => {
                 if (addActionTarget && addActionTitle.trim()) {
-                  addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim());
-                  setAddActionOpen(false);
-                  setAddActionTitle('');
-                  setAddActionTarget(null);
+                  addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim(), addActionEffort);
+                  setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionEffort('easy');
                 }
               }}
             />
+
+            {/* Effort picker */}
+            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>EFFORT</Text>
+            <View style={styles.effortRow}>
+              {(['easy', 'medium', 'heavy'] as ActionEffort[]).map(level => {
+                const sel = addActionEffort === level;
+                const labels: Record<ActionEffort, string> = { easy: 'EASY', medium: 'MEDIUM', heavy: 'HEAVY' };
+                return (
+                  <TouchableOpacity
+                    key={level}
+                    style={[styles.effortBtn, sel && { borderColor: theme.accent, backgroundColor: 'rgba(56,189,248,0.1)' }]}
+                    onPress={() => setAddActionEffort(level)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.effortBtnText, { color: sel ? theme.accent : theme.textMuted }]}>{labels[level]}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             {/* Actions */}
             <View style={styles.addActionActions}>
               <TouchableOpacity
                 style={styles.addActionCancel}
-                onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); }}
+                onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.addActionCancelText, { color: theme.textMuted }]}>CANCEL</Text>
@@ -324,10 +352,8 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                 style={[styles.addActionSubmit, { borderColor: theme.glassBorder }]}
                 onPress={() => {
                   if (addActionTarget && addActionTitle.trim()) {
-                    addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim());
-                    setAddActionOpen(false);
-                    setAddActionTitle('');
-                    setAddActionTarget(null);
+                    addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim(), addActionEffort);
+                    setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionEffort('easy');
                   }
                 }}
                 activeOpacity={0.7}
@@ -364,6 +390,9 @@ const styles = StyleSheet.create({
   addActionDropdownItemActive: { backgroundColor: 'rgba(255,255,255,0.06)' },
   addActionCoordChipText: { fontSize: 14, fontWeight: '600' },
   addActionInput: { fontSize: 14, paddingVertical: 10, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 16 },
+  effortRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  effortBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  effortBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
   addActionActions: { flexDirection: 'row', justifyContent: 'flex-end' },
   addActionCancel: { paddingVertical: 8, paddingHorizontal: 16, marginRight: 12 },
   addActionCancelText: { fontSize: 14, fontWeight: '700', letterSpacing: 2 },
@@ -384,13 +413,15 @@ const styles = StyleSheet.create({
   coordLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 3, marginBottom: 8, opacity: 0.6 },
   actionCardOuter: { marginBottom: 6, borderRadius: 10, overflow: 'hidden' },
   actionCardPriority: { shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10 },
-  actionCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
+  actionCard: { paddingVertical: 14, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
   actionCardBody: { flex: 1, flexDirection: 'column' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   actionFocusBtn: { padding: 4, marginRight: 10 },
   actionTitleBlock: { flex: 1 },
   actionRightBlock: { flexDirection: 'row', alignItems: 'center' },
   actionPriorityLabel: { fontSize: 14, fontWeight: '700', letterSpacing: 1, marginRight: 8 },
+  effortBadge: { borderWidth: 1, borderRadius: 4, paddingVertical: 2, paddingHorizontal: 5, marginRight: 8 },
+  effortBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   actionTitle: { fontSize: 14 },
   actionTitleStrike: { textDecorationLine: 'line-through' },
   actionEmptyState: { borderWidth: 1, borderColor: 'rgba(226,232,240,0.5)', borderStyle: 'dashed', borderRadius: 12, padding: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },

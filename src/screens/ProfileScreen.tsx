@@ -1,11 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Modal, ScrollView, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Modal, Dimensions } from 'react-native';
 import Svg, { Circle, Path, Line, Polyline, Ellipse } from 'react-native-svg';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '../stores/useAppStore';
-import { useSnapshotStore, RadarSnapshot } from '../stores/useSnapshotStore';
-import { Coordinates } from '../components/Coordinates';
-import { SnapshotDetailModal } from '../components/SnapshotDetailModal';
 import { THEME, MOTIVATOR_TENSIONS, PERSONA_DATA } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
@@ -33,19 +30,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
   } = useAppStore();
   const theme = useTheme();
 
-  const { snapshots, loaded, loadSnapshots } = useSnapshotStore();
-
-  useEffect(() => {
-    if (!loaded) loadSnapshots();
-  }, []);
-
   const handleTensionSelect = (id: string, side: 'left' | 'right') => {
     setMotivatorChoices({ ...motivatorChoices, [id]: side });
   };
-
-  // Persona modal state removed, persona is derived from motivators.
-  const scrollRef = useRef<ScrollView>(null);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<RadarSnapshot | null>(null);
 
   return (
     <View>
@@ -213,66 +200,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         />
       </GlassCard>
 
-      {/* Logbook */}
-      <GlassCard style={styles.profileCard}>
-        <View style={styles.profileSectionHeaderRow}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-          </Svg>
-          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>LOGBOOK</Text>
-        </View>
-
-        {snapshots.length === 0 ? (
-          <View style={styles.logbookEmpty}>
-            <Text style={[styles.logbookEmptyTitle, { color: theme.textMuted }]}>NO ENTRIES YET</Text>
-            <Text style={[styles.logbookEmptyBody, { color: theme.textMuted }]}>
-              When a node average crosses 7.0, a snapshot of your Atlas is saved here automatically.
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.logbookScroll}
-          >
-            {snapshots.map(snap => {
-              const d = new Date(snap.createdAt);
-              const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              const yearStr = d.getFullYear().toString();
-              const triggerNode = snap.nodeScores.find(n => n.nodeId === snap.triggerNodeId);
-              return (
-                <TouchableOpacity key={snap.id} style={[styles.logbookCard, { backgroundColor: theme.inputBg, borderColor: theme.divider }]} onPress={() => setSelectedSnapshot(snap)} activeOpacity={0.8}>
-                  <Coordinates nodes={snap.nodeScores} size={88} />
-                  <View style={styles.logbookCardMeta}>
-                    <Text style={[styles.logbookCardDate, { color: theme.text }]}>{dateStr}</Text>
-                    <Text style={[styles.logbookCardYear, { color: theme.textMuted }]}>{yearStr}</Text>
-                    <View style={[styles.logbookCardDot, { backgroundColor: triggerNode?.color ?? theme.accent }]} />
-                    <Text style={[styles.logbookCardNode, { color: triggerNode?.color ?? theme.accent }]}>
-                      {snap.triggerNodeName.toUpperCase()}
-                    </Text>
-                    <Text style={[styles.logbookCardAvg, { color: theme.textMuted }]}>{snap.triggerNodeAvg.toFixed(1)}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-      </GlassCard>
-
-      {/* Snapshot detail modal */}
-      {selectedSnapshot && (
-        <SnapshotDetailModal
-          visible={!!selectedSnapshot}
-          onClose={() => setSelectedSnapshot(null)}
-          nodes={selectedSnapshot.nodeScores}
-          label={new Date(selectedSnapshot.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
-          triggerNode={selectedSnapshot.nodeScores.find(n => n.nodeId === selectedSnapshot.triggerNodeId)
-            ? { name: selectedSnapshot.triggerNodeName, color: selectedSnapshot.nodeScores.find(n => n.nodeId === selectedSnapshot.triggerNodeId)!.color, avg: selectedSnapshot.triggerNodeAvg }
-            : null}
-        />
-      )}
-
       {/* Theme Toggle */}
       <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
         <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>APPEARANCE</Text>
@@ -346,19 +273,6 @@ const styles = StyleSheet.create({
   personaSelectBtn: { paddingVertical: 10, paddingHorizontal: 28, borderRadius: 20, borderWidth: 1 },
   personaSelectBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 2 },
   profileTextArea: { borderWidth: 1, borderColor: THEME.border, borderRadius: 4, color: 'white', fontSize: 14, padding: 12, minHeight: 100, textAlignVertical: 'top' },
-  // Logbook
-  logbookEmpty: { paddingVertical: 20, alignItems: 'center' },
-  logbookEmptyTitle: { color: THEME.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
-  logbookEmptyBody: { color: THEME.textDim, fontSize: 12, lineHeight: 18, textAlign: 'center', opacity: 0.7 },
-  logbookScroll: { paddingBottom: 4, gap: 12 },
-  logbookCard: { width: 100, alignItems: 'center', backgroundColor: THEME.bg, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
-  logbookCardMeta: { alignItems: 'center', marginTop: 8, gap: 2 },
-  logbookCardDate: { color: 'white', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  logbookCardYear: { color: THEME.textDim, fontSize: 10, letterSpacing: 0.5, marginBottom: 4 },
-  logbookCardDot: { width: 5, height: 5, borderRadius: 3, marginBottom: 2 },
-  logbookCardNode: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
-  logbookCardAvg: { color: THEME.textDim, fontSize: 11, fontWeight: '600', marginTop: 1 },
-
   themeToggleBtn: { paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
   themeToggleBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
   devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 },

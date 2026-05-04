@@ -135,6 +135,8 @@ export async function upsertAction(
       created_at: action.createdAt,
       completed_at: action.completedAt ?? '',
       timestamp: action.timestamp,
+      effort: action.effort ?? 'easy',
+      archived: action.archived ?? false,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'id,user_id' }
@@ -207,6 +209,8 @@ export async function fetchUserData(userId: string): Promise<UserData> {
             reminder: a.reminder,
             createdAt: a.created_at,
             completedAt: a.completed_at || undefined,
+            effort: a.effort ?? 'easy',
+            archived: a.archived ?? false,
           }));
         return {
           id: c.id,

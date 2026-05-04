@@ -4,15 +4,15 @@ import {
   SafeAreaView, StatusBar, Dimensions, PanResponder, Modal,
   KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
-import Svg, { Circle, Path, G } from 'react-native-svg';
+import Svg, { Circle, Path, G, Line } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './lib/supabase';
 import { useAppStore } from './src/stores/useAppStore';
 import { FadingBorder } from './src/components/FadingBorder';
-import { CopilotCard, LastCycleData } from './src/components/CopilotCard';
+import { CopilotCard, LastCycleData, NodeBubble, CoordinateDot } from './src/components/CopilotCard';
 import { fetchCopilot, CopilotPayload, CopilotAction, TAB_CONFIG } from './src/services/aiService';
-import { THEME, NODE_COLORS, INFO_TEXTS, PERSONA_SUBTITLES } from './src/constants/theme';
+import { THEME, NODE_COLORS, INFO_TEXTS } from './src/constants/theme';
 import { AtlasScreen } from './src/screens/AtlasScreen';
 import { NodesScreen } from './src/screens/NodesScreen';
 import { ActionsScreen } from './src/screens/ActionsScreen';
@@ -37,6 +37,7 @@ export default function App() {
   const [addActionTarget, setAddActionTarget] = useState<{ nodeId: string; goalId: string } | null>(null);
   const [editingAction, setEditingAction] = useState<{ nodeId: string; goalId: string; actionId: string } | null>(null);
   const [editForm, setEditForm] = useState({ title: '', nodeId: '', goalId: '', isPriority: false, notes: '', dueDate: '', reminder: '' });
+  const [editFormEffort, setEditFormEffort] = useState<'easy' | 'medium' | 'heavy'>('easy');
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [addNodeForm, setAddNodeForm] = useState({ name: '', description: '', color: NODE_COLORS[0] });
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export default function App() {
     nodes, hasAccess, session,
     cognitiveModel, persona,
     updateValue, updateNode, updateGoal, addNode: storeAddNode, saveActionEdit,
-    toggleAction, getNodeAvg,
+    toggleAction, getNodeAvg, deleteAction, archiveAction,
     setSession, loadUserData,
     setCognitiveModel,
   } = useAppStore();
@@ -86,9 +87,6 @@ export default function App() {
   // — active theme tokens —
   const theme = useTheme();
   const isDark = theme.glassBlurTint === 'dark';
-
-  // — header — derived from persona + active tab
-  const headerSubtitle = PERSONA_SUBTITLES[persona]?.[activeTab] ?? '';
 
   // — sync edit node form when editingNodeId changes —
   useEffect(() => {
@@ -192,81 +190,159 @@ export default function App() {
       const allActions = nodes.flatMap(n => n.goals.flatMap(g => g.actions.map(a => ({ ...a, nodeId: n.id, goalId: g.id, goalName: g.name }))));
       const completed = allActions.filter(a => a.completed).length;
       const pending = allActions.filter(a => !a.completed).length;
-      const topCoord = nodes.flatMap(n => n.goals.map(g => ({ nodeId: n.id, goalId: g.id, goalName: g.name, pending: g.actions.filter(a => !a.completed).length }))).sort((a, b) => b.pending - a.pending)[0];
+      const topCoord = nodes
+        .flatMap(n => n.goals.map(g => ({ nodeId: n.id, goalId: g.id, goalName: g.name, pending: g.actions.filter(a => !a.completed).length })))
+        .sort((a, b) => b.pending - a.pending)[0];
       const lowestNode = lowest?.node;
-      const tasksHealthy = pending === 0 && completed > 0;
+      const nothingInPlace = nodes.find(n => n.goals.every(g => g.actions.length === 0));
+      const allClear = pending === 0 && completed > 0;
       return {
-        header: 'TASK DISPATCH',
-        stats: [{ label: 'COMPLETED', value: String(completed) }, { label: 'PENDING', value: String(pending) }],
-        lines: tasksHealthy ? [
-          { prefix: '> VELOCITY:', text: 'BACKLOG CLEAR — STRONG COMPLETION RATE.' },
-          { prefix: '> DISPATCH:', text: 'MOMENTUM IS BUILDING. DEPLOY YOUR NEXT ACTION.' },
+        header: 'REFLECTION',
+        stats: [{ label: 'DONE', value: String(completed) }, { label: 'OPEN', value: String(pending) }],
+        lines: allClear ? [
+          { prefix: 'SIGNAL', text: `Everything is done. ${highest?.node?.name ? `${highest.node.name} is where you have the most momentum — keep it going.` : 'Keep the momentum going.'}` },
+          { prefix: 'MORE', text: 'A clear list is a good time to decide what to add next, not just what to finish.' },
+        ] : pending > 0 ? [
+          { prefix: 'TENSION', text: topCoord?.pending ? `${topCoord.goalName} has ${topCoord.pending} open action${topCoord.pending !== 1 ? 's' : ''} with nothing done yet. That's the one to move on.` : `You have ${pending} open action${pending !== 1 ? 's' : ''}. Pick one and do it.` },
+          { prefix: 'MORE', text: 'Progress on one thing is better than holding space for ten.' },
         ] : [
-          { prefix: '> VELOCITY:', text: `${completed} COMPLETED, ${pending} PENDING.` },
-          { prefix: '> DISPATCH:', text: topCoord?.pending ? `${topCoord.goalName.toUpperCase()} HAS ${topCoord.pending} PENDING ACTION${topCoord.pending !== 1 ? 'S' : ''}.` : 'NO PENDING ACTIONS.' },
+          { prefix: 'TENSION', text: nothingInPlace ? `${nothingInPlace.name} has no actions behind it yet. That's where to start.` : `${lowestNode?.name ?? 'Your lowest area'} could use something concrete behind it.` },
+          { prefix: 'MORE', text: 'Intentions without actions stay intentions.' },
         ],
-        actions: tasksHealthy ? [
-          { label: `Keep the momentum going in ${highest?.node?.name ?? 'your top node'}.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
-          { label: `Add a new action to ${lowestNode?.name ?? 'your lowest node'}.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
+        actions: allClear ? [
+          { label: `Add something new to ${highest?.node?.name ?? 'your strongest area'}.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+          { label: `Give ${lowestNode?.name ?? 'your lowest area'} some attention.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
         ] : [
-          { label: `Prioritize ${topCoord?.goalName ?? 'your top coordinate'} work.`, action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId },
-          { label: `Deploy a new action to ${lowestNode?.name ?? 'your lowest node'}.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
+          { label: topCoord ? `Work on ${topCoord.goalName}.` : 'Move on your top open action.', action: 'prioritize', nodeId: topCoord?.nodeId, goalId: topCoord?.goalId },
+          { label: `Add an action to ${lowestNode?.name ?? 'your lowest area'}.`, action: 'deployTask', nodeId: lowestNode?.id, goalId: lowestNode?.goals[0]?.id },
         ],
       };
     }
 
     if (activeTab === 'Nodes') {
-      const belowThreshold = nodes.flatMap(n => n.goals.filter(g => g.value < 6));
-      const noCalibrations = nodes.flatMap(n => n.goals.filter(g => g.actions.length === 0));
-      const nodesHealthy = belowThreshold.length === 0 && noCalibrations.length === 0;
+      const lowAreas = nodes.filter(n => getAvg(n) < 6);
+      const noActions = nodes.flatMap(n => n.goals.filter(g => g.actions.length === 0));
+      const allGood = lowAreas.length === 0 && noActions.length === 0;
       return {
-        header: 'NODE DIAGNOSTIC',
-        stats: [{ label: 'BELOW 6', value: String(belowThreshold.length) }, { label: 'NO ACTIONS', value: String(noCalibrations.length) }],
-        lines: nodesHealthy ? [
-          { prefix: '> SCAN:', text: 'ALL COORDINATES ABOVE THRESHOLD — SYSTEM HOLDING STRONG.' },
-          { prefix: '> SIGNAL:', text: 'ACTIONS ARE IN PLACE. FOCUS ON DEEPENING WHAT\'S WORKING.' },
+        header: 'REFLECTION',
+        stats: [{ label: 'BELOW 6', value: String(lowAreas.length) }, { label: 'NO ACTIONS', value: String(noActions.length) }],
+        lines: allGood ? [
+          { prefix: 'SIGNAL', text: `Everything is above a 6 and has actions behind it. ${highest?.node?.name ? `${highest.node.name} is your strongest area right now.` : 'Things are holding well.'}` },
+          { prefix: 'MORE', text: 'Stability is worth recognising — this is a good moment to go deeper, not just maintain.' },
+        ] : lowAreas.length > 0 ? [
+          { prefix: 'TENSION', text: `${lowAreas[0].name} is the lowest${lowAreas.length > 1 ? ` and it's not alone — ${lowAreas.slice(1).map(n => n.name).join(', ')} are also below a 6` : ''}. That's where to put your energy.` },
+          { prefix: 'MORE', text: noActions.length > 0 ? `There are also ${noActions.length} tracked item${noActions.length !== 1 ? 's' : ''} with nothing in place to move them.` : 'A low score with no actions is the clearest signal in the whole app.' },
         ] : [
-          { prefix: '> SCAN:', text: belowThreshold.length ? `${belowThreshold.length} COORDINATE${belowThreshold.length !== 1 ? 'S' : ''} BELOW THRESHOLD.` : 'ALL COORDINATES ABOVE THRESHOLD.' },
-          { prefix: '> SIGNAL:', text: noCalibrations.length ? `${noCalibrations.length} COORDINATE${noCalibrations.length !== 1 ? 'S' : ''} HAVE NO ACTIONS.` : 'ALL COORDINATES HAVE ACTIONS.' },
+          { prefix: 'TENSION', text: `${noActions.length} thing${noActions.length !== 1 ? 's' : ''} you track ${noActions.length !== 1 ? 'have' : 'has'} no actions behind ${noActions.length !== 1 ? 'them' : 'it'}. Intentions need something concrete.` },
+          { prefix: 'MORE', text: `Start with ${noActions[0]?.name ?? 'the one that matters most'}.` },
         ],
-        actions: nodesHealthy ? [
-          { label: `Push your strongest node ${highest?.node?.name ?? ''} even further.`, action: 'calibrate', nodeId: highest?.node?.id },
-          { label: `Add an action to deepen ${highest?.node?.goals[0]?.name ?? 'your top coordinate'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+        actions: allGood ? [
+          { label: `Go deeper on ${highest?.node?.name ?? 'your strongest area'}.`, action: 'calibrate', nodeId: highest?.node?.id },
+          { label: `Add something to ${highest?.node?.goals[0]?.name ?? 'your top area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
         ] : [
-          { label: `Calibrate ${lowest?.node?.name ?? 'your lowest node'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
-          { label: `Add an action to ${noCalibrations[0]?.name ?? 'a coordinate'}.`, action: 'addCalibration', nodeId: nodes.find(n => n.goals.some(g => g.actions.length === 0))?.id, goalId: noCalibrations[0]?.id },
+          { label: `Update your score for ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
+          { label: `Add an action to ${noActions[0]?.name ?? 'something without one'}.`, action: 'addCalibration', nodeId: nodes.find(n => n.goals.some(g => g.actions.length === 0))?.id, goalId: noActions[0]?.id },
         ],
       };
     }
 
     // Atlas + Profile
     const totalAvg = withAvg.length ? (withAvg.reduce((acc, w) => acc + w.avg, 0) / withAvg.length).toFixed(1) : '0.0';
-    const allAbove = withAvg.every(w => w.avg >= 6);
-    const atlasHealthy = parseFloat(totalAvg) >= 7.5 && allAbove;
+    const allSolid = withAvg.every(w => w.avg >= 6);
+    const isHealthy = parseFloat(totalAvg) >= 7.5 && allSolid;
     return {
-      header: 'SYSTEM STATUS',
-      stats: [{ label: 'ATLAS AVG', value: totalAvg }, { label: 'NODES', value: String(nodes.length) }],
-      lines: atlasHealthy ? [
-        { prefix: '> STATUS:', text: `ATLAS HOLDING AT ${totalAvg} — ALL NODES ABOVE THRESHOLD.` },
-        { prefix: '> FOCUS:', text: 'SYSTEM IS STABLE. SUSTAIN THE CALIBRATION.' },
-      ] : highest ? [
-        { prefix: '> STATUS:', text: `ATLAS WEIGHTED TOWARD ${highest.node.name.toUpperCase()} (${highest.avg.toFixed(1)}).` },
-        { prefix: '> FOCUS:', text: lowest && lowest.node.id !== highest.node.id ? `${lowest.node.name.toUpperCase()} TRAILING AT ${lowest.avg.toFixed(1)} — STRUCTURAL DRIFT.` : 'BALANCED ACROSS ALL NODES.' },
+      header: 'REFLECTION',
+      stats: [{ label: 'OVERALL', value: totalAvg }, { label: 'AREAS', value: String(nodes.length) }],
+      lines: !nodes.length ? [
+        { prefix: 'SIGNAL', text: 'No areas added yet. Start by adding one thing that matters to you.' },
+        { prefix: 'MORE', text: 'Work, Health, Relationships — pick whatever feels most alive right now.' },
+      ] : isHealthy ? [
+        { prefix: 'SIGNAL', text: `Everything is holding at ${totalAvg}. ${highest?.node?.name ? `${highest.node.name} is your strongest area.` : 'Things are in good shape.'}` },
+        { prefix: 'MORE', text: 'Good shape is a moment to go deeper on what matters, not just maintain what exists.' },
+      ] : lowest && lowest.node.id !== highest?.node?.id ? [
+        { prefix: 'TENSION', text: `${lowest.node.name} is pulling below everything else at ${lowest.avg.toFixed(1)}. That's where to look.` },
+        { prefix: 'MORE', text: `${highest?.node?.name ? `${highest.node.name} is your strongest at ${highest.avg.toFixed(1)} — ` : ''}one area lagging changes how the whole thing feels.` },
       ] : [
-        { prefix: '> STATUS:', text: 'NO NODES DEFINED YET.' },
-        { prefix: '> FOCUS:', text: 'ADD NODES TO BUILD YOUR ATLAS.' },
+        { prefix: 'SIGNAL', text: `Things are fairly balanced at ${totalAvg} overall. No single area is obviously off.` },
+        { prefix: 'MORE', text: 'Balanced but low still means something needs attention — look at which area feels most neglected.' },
       ],
-      actions: atlasHealthy ? [
-        { label: `Keep ${highest?.node?.name ?? 'your top node'} calibrated.`, action: 'calibrate', nodeId: highest?.node?.id },
-        { label: `Add an action to deepen ${highest?.node?.goals[0]?.name ?? 'your top coordinate'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+      actions: isHealthy ? [
+        { label: `Go deeper on ${highest?.node?.name ?? 'your strongest area'}.`, action: 'calibrate', nodeId: highest?.node?.id },
+        { label: `Add something to ${highest?.node?.goals[0]?.name ?? 'your top area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
       ] : [
-        { label: `Calibrate your ${lowest?.node?.name ?? 'lowest'} node.`, action: 'calibrate', nodeId: lowest?.node?.id },
-        { label: `Add an action in ${highest?.node?.name ?? 'your top node'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals.find(g => g.actions.length === 0)?.id ?? highest?.node?.goals[0]?.id },
+        { label: `Update your score for ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
+        { label: `Add an action to ${highest?.node?.name ?? 'your strongest area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals.find(g => g.actions.length === 0)?.id ?? highest?.node?.goals[0]?.id },
       ],
     };
   }, [activeTab, nodes, cognitiveModel]);
 
   // briefingHighlight removed — handled inside CopilotCard
+
+  // ─── CopilotCard visual data ──────────────────────────────────────────────
+
+  /** Bubble data for the Nodes tab visual — all nodes with their avg score */
+  const nodeBubbles = useMemo((): NodeBubble[] =>
+    nodes.map(n => ({
+      name: n.name,
+      score: parseFloat(getNodeAvg(n)),
+      color: n.color,
+    })),
+  [nodes, getNodeAvg]);
+
+  /** The lowest-scoring coordinate across all nodes — shown in the Actions focus circle */
+  const focusCoordinate = useMemo(() => {
+    let lowest: { name: string; score: number; color: string } | null = null;
+    for (const node of nodes) {
+      for (const goal of node.goals) {
+        if (!lowest || goal.value < lowest.score) {
+          lowest = { name: goal.name, score: goal.value, color: node.color };
+        }
+      }
+    }
+    return lowest;
+  }, [nodes]);
+
+  /** 7-day system trajectory for the Atlas dive-deeper sparkline */
+  const systemTrajectory = useMemo((): number[] => {
+    if (nodes.length === 0) return [];
+    const getPastDays = (n: number) =>
+      Array.from({ length: n }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (n - 1 - i));
+        return d.toISOString().split('T')[0];
+      });
+    const days = getPastDays(7);
+    // For each day, compute system avg (avg of node avgs)
+    return days.map(day => {
+      const nodeAvgs = nodes.map(node => {
+        if (node.goals.length === 0) return 0;
+        const dayScores = node.goals.map(g => {
+          const hist = g.scoreHistory;
+          if (!hist || hist.length === 0) return g.value;
+          const candidates = hist
+            .filter(h => h.date.split('T')[0] <= day)
+            .sort((a, b) => b.date.localeCompare(a.date));
+          return candidates.length > 0 ? candidates[0].value : g.value;
+        });
+        return dayScores.reduce((a, b) => a + b, 0) / dayScores.length;
+      });
+      return Math.min(10, Math.max(0,
+        nodeAvgs.reduce((a, b) => a + b, 0) / nodeAvgs.length
+      ));
+    });
+  }, [nodes]);
+
+  /** All coordinates flattened for the Actions dive-deeper scatter */
+  const allCoordinates = useMemo((): CoordinateDot[] =>
+    nodes.flatMap(node =>
+      node.goals.map(g => ({
+        name: g.name,
+        score: g.value,
+        color: node.color,
+        calibrationCount: g.actions.length,
+      }))
+    ),
+  [nodes]);
 
   // — copilot action handler —
   const handleCopilotAction = useCallback((act: CopilotAction) => {
@@ -375,7 +451,6 @@ export default function App() {
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={[styles.headerTitle, { color: theme.text }]}>{activeTab.toUpperCase()}</Text>
-              <Text style={[styles.headerSubtitle, { color: theme.textMuted }]}>{headerSubtitle}</Text>
             </View>
             <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setInfoOpen(true)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Svg width={20} height={20} viewBox="0 0 24 24">
@@ -391,6 +466,8 @@ export default function App() {
             <AtlasScreen
               guidanceActions={(aiCopilot && aiCopilot !== 'loading' ? aiCopilot : copilotFallback).actions}
               onAction={handleCopilotAction}
+              onGoToNode={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Nodes'); }}
+              onGoToActions={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Actions'); }}
               onOpenCoordinate={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
               onOpenAction={(nodeId, goalId, actionId) => {
                 const node = nodes.find(n => n.id === nodeId);
@@ -398,6 +475,7 @@ export default function App() {
                 const action = goal?.actions.find(a => a.id === actionId);
                 if (action) {
                   setEditForm({ title: action.title, nodeId, goalId, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '' });
+                  setEditFormEffort(action.effort ?? 'easy');
                   setEditingAction({ nodeId, goalId, actionId });
                 }
               }}
@@ -426,6 +504,7 @@ export default function App() {
                 const action = goal?.actions.find(a => a.id === actionId);
                 if (action) {
                   setEditForm({ title: action.title, nodeId, goalId, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '' });
+                  setEditFormEffort(action.effort ?? 'easy');
                   setEditingAction({ nodeId, goalId, actionId });
                 }
               }}
@@ -452,31 +531,34 @@ export default function App() {
             <TouchableOpacity key={t} onPress={() => setActiveTab(t)} style={styles.navBtn}>
               <View style={styles.navIconWrap}>
                 {t === 'Atlas' && (
-                  <Svg width={28} height={28} viewBox="0 0 1024 1024">
-                    <Path fill={c} d="M511.8 1023.7C229.6 1023.7 0 794.1 0 511.8S229.6 0 511.8 0s511.8 229.6 511.8 511.8-229.5 511.9-511.8 511.9z m0-938.4c-235.2 0-426.5 191.3-426.5 426.5s191.3 426.5 426.5 426.5S938.3 747 938.3 511.8 747 85.3 511.8 85.3z" />
-                    <Path fill={c} d="M292.7 773.7c-11.1 0-22-4.4-30.2-12.5-11.8-11.7-15.6-29.3-9.9-44.9l96.9-263.5c17.9-48.7 54.6-85.4 103.3-103.3l263.5-96.9c15.6-5.7 33.1-1.9 44.9 9.9 11.8 11.7 15.6 29.3 9.9 44.9l-96.9 263.5c-17.9 48.7-54.6 85.4-103.3 103.3l-263.5 96.9c-4.8 1.8-9.8 2.6-14.7 2.6z m366.5-409.2l-176.8 65c-25.6 9.4-43.3 27.2-52.7 52.7L364.6 659l176.8-65c25.6-9.4 43.3-27.2 52.7-52.7l65.1-176.8z" />
+                  <Svg width={44} height={44} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="44" stroke={c} strokeWidth="5" fill="none" />
+                    <Circle cx="60" cy="60" r="10" fill={c} />
                   </Svg>
                 )}
                 {t === 'Nodes' && (
-                  <Svg width={22} height={22} viewBox="0 0 24 24">
-                    <G fill="none" stroke={c} strokeWidth={1.5}>
-                      <Path strokeLinecap="round" d="m13.5 7l3.5 3.5m-10 3l3.5 3.5m0-10L7 10.5m10 3L13.5 17" />
-                      <Circle cx="12" cy="5.5" r="2" /><Circle cx="12" cy="18.5" r="2" />
-                      <Circle cx="5.5" cy="12" r="2" /><Circle cx="18.5" cy="12" r="2" />
-                    </G>
+                  <Svg width={44} height={44} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="40" stroke={c} strokeWidth="2" fill="none" opacity={0.25} />
+                    <Circle cx="60" cy="60" r="16" fill={c} />
+                    <Circle cx="20" cy="60" r="8" fill={active ? "#A78BFA" : c} />
+                    <Circle cx="80" cy="25" r="10" fill={active ? "#34D399" : c} />
+                    <Circle cx="88" cy="88" r="7" fill={active ? "#F472B6" : c} />
                   </Svg>
                 )}
                 {t === 'Actions' && (
-                  <Svg width={28} height={28} viewBox="0 0 32 32">
-                    <Path fill={c} d="M10.293 5.293L7 8.586L5.707 7.293L4.293 8.707L7 11.414l4.707-4.707zM14 7v2h14V7zm0 8v2h14v-2zm0 8v2h14v-2z" />
+                  <Svg width={44} height={44} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="60" r="30" stroke={c} strokeWidth="4" fill="none" opacity={0.5} />
+                    <Circle cx="60" cy="30" r="6" fill={c} />
+                    <Circle cx="81" cy="81" r="6" fill={c} />
+                    <Circle cx="39" cy="81" r="6" fill={c} />
+                    <Path d="M57 30 L60 33 L64 27" stroke={active ? "#10B981" : c} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <Path d="M78 81 L81 84 L85 78" stroke={active ? "#10B981" : c} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                   </Svg>
                 )}
                 {t === 'Profile' && (
-                  <Svg width={22} height={22} viewBox="0 0 24 24">
-                    <G fill="none" stroke={c} strokeWidth={2}>
-                      <Path strokeLinejoin="round" d="M4 18a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" />
-                      <Circle cx="12" cy="7" r="3" />
-                    </G>
+                  <Svg width={35} height={35} viewBox="0 0 120 120">
+                    <Circle cx="60" cy="38" r="18" stroke={c} strokeWidth="8" fill="none" />
+                    <Path d="M14 102 C14 74 34 58 60 58 C86 58 106 74 106 102" stroke={c} strokeWidth="8" fill="none" strokeLinecap="round" />
                   </Svg>
                 )}
               </View>
@@ -521,22 +603,27 @@ export default function App() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
             <View style={styles.addNodeCard} pointerEvents="auto">
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={styles.addNodeHeader}>
+                  <Text style={styles.addNodeHeaderLabel}>NEW NODE</Text>
+                  <View style={[styles.addNodeHeaderDot, { backgroundColor: addNodeForm.color }]} />
+                </View>
+                <Text style={styles.editFormLabel}>NAME</Text>
+                <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={t => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Work, Health, Relationships…" placeholderTextColor={THEME.textDim} autoFocus />
+                <Text style={styles.editFormLabel}>INTENT</Text>
+                <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={addNodeForm.description} onChangeText={t => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
+                <View style={styles.addNodeDivider} />
                 <Text style={styles.editFormLabel}>COLOR</Text>
                 <View style={styles.addNodeColorRow}>
                   {NODE_COLORS.map(c => (
                     <TouchableOpacity key={c} onPress={() => setAddNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, addNodeForm.color === c && styles.addNodeSwatchSelected]} />
                   ))}
                 </View>
-                <Text style={styles.editFormLabel}>TITLE</Text>
-                <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={t => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} />
-                <Text style={styles.evidenceLabel}>DEFINE THE DESIRED INTENT</Text>
-                <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={addNodeForm.description} onChangeText={t => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="Intent or purpose…" placeholderTextColor={THEME.textDim} />
                 <View style={styles.actionRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => { setAddNodeOpen(false); setAddNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
                     <Text style={styles.cancelBtnText}>CANCEL</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.submitBtn} onPress={handleAddNode} activeOpacity={0.7}>
-                    <Text style={styles.submitBtnText}>ADD NODE</Text>
+                  <TouchableOpacity style={[styles.submitBtn, { backgroundColor: addNodeForm.color, borderColor: addNodeForm.color }]} onPress={handleAddNode} activeOpacity={0.7}>
+                    <Text style={[styles.submitBtnText, { color: '#fff' }]}>ADD NODE</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
@@ -552,22 +639,27 @@ export default function App() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
             <View style={styles.addNodeCard} pointerEvents="auto">
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={styles.addNodeHeader}>
+                  <Text style={styles.addNodeHeaderLabel}>EDIT NODE</Text>
+                  <View style={[styles.addNodeHeaderDot, { backgroundColor: editNodeForm.color }]} />
+                </View>
+                <Text style={styles.editFormLabel}>NAME</Text>
+                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoFocus />
+                <Text style={styles.editFormLabel}>INTENT</Text>
+                <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
+                <View style={styles.addNodeDivider} />
                 <Text style={styles.editFormLabel}>COLOR</Text>
                 <View style={styles.addNodeColorRow}>
                   {NODE_COLORS.map(c => (
                     <TouchableOpacity key={c} onPress={() => setEditNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, editNodeForm.color === c && styles.addNodeSwatchSelected]} />
                   ))}
                 </View>
-                <Text style={styles.editFormLabel}>TITLE</Text>
-                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} />
-                <Text style={styles.evidenceLabel}>DEFINE THE DESIRED INTENT</Text>
-                <TextInput style={[styles.evidenceInput, { marginBottom: 16 }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="Intent or purpose…" placeholderTextColor={THEME.textDim} />
                 <View style={styles.actionRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
                     <Text style={styles.cancelBtnText}>CANCEL</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.submitBtn} onPress={() => { if (editNodeForm.name.trim() && editingNodeId) { updateNode(editingNodeId, { name: editNodeForm.name.trim(), description: editNodeForm.description.trim(), color: editNodeForm.color }); setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); } }} activeOpacity={0.7}>
-                    <Text style={styles.submitBtnText}>SAVE</Text>
+                  <TouchableOpacity style={[styles.submitBtn, { backgroundColor: editNodeForm.color, borderColor: editNodeForm.color }]} onPress={() => { if (editNodeForm.name.trim() && editingNodeId) { updateNode(editingNodeId, { name: editNodeForm.name.trim(), description: editNodeForm.description.trim(), color: editNodeForm.color }); setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); } }} activeOpacity={0.7}>
+                    <Text style={[styles.submitBtnText, { color: '#fff' }]}>SAVE</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
@@ -626,6 +718,7 @@ export default function App() {
                       style={styles.coordEditTaskRow}
                       onPress={() => {
                         setEditForm({ title: a.title, nodeId: node.id, goalId: goal.id, isPriority: !!a.isPriority, notes: a.notes || '', dueDate: a.dueDate || '', reminder: a.reminder || '' });
+                        setEditFormEffort(a.effort ?? 'easy');
                         setEditingAction({ nodeId: node.id, goalId: goal.id, actionId: a.id });
                         setEditingCoordinate(null);
                       }}
@@ -664,6 +757,23 @@ export default function App() {
             <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.editFormLabel}>TITLE</Text>
               <TextInput style={styles.editFormInput} value={editForm.title} onChangeText={t => setEditForm(f => ({ ...f, title: t }))} placeholderTextColor={THEME.textDim} />
+              <Text style={styles.editFormLabel}>EFFORT</Text>
+              <View style={styles.effortPickerRow}>
+                {(['easy', 'medium', 'heavy'] as const).map(level => {
+                  const sel = editFormEffort === level;
+                  const labels = { easy: 'EASY', medium: 'MEDIUM', heavy: 'HEAVY' };
+                  return (
+                    <TouchableOpacity
+                      key={level}
+                      style={[styles.effortPickerBtn, sel && { borderColor: THEME.accent, backgroundColor: 'rgba(56,189,248,0.1)' }]}
+                      onPress={() => setEditFormEffort(level)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.effortPickerBtnText, { color: sel ? THEME.accent : THEME.textDim }]}>{labels[level]}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
               <Text style={styles.editFormLabel}>NODE</Text>
               <View style={styles.taskEditChipRow}>
                 {nodes.map(n => {
@@ -705,11 +815,28 @@ export default function App() {
               <Text style={styles.evidenceLabel}>REMINDER</Text>
               <TextInput style={styles.evidenceInput} value={editForm.reminder} onChangeText={t => setEditForm(f => ({ ...f, reminder: t }))} placeholder="e.g. 9:00 AM" placeholderTextColor={THEME.textDim} />
             </ScrollView>
+            {/* Destructive actions */}
+            <View style={styles.editDestructiveRow}>
+              <TouchableOpacity
+                style={styles.editArchiveBtn}
+                onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editArchiveBtnText}>ARCHIVE</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editDeleteBtn}
+                onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.editDeleteBtnText}>DELETE</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingAction(null)} activeOpacity={0.7}>
                 <Text style={styles.cancelBtnText}>CANCEL</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={() => { saveActionEdit(editingAction, editForm); setEditingAction(null); }} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.submitBtn} onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); }} activeOpacity={0.7}>
                 <Text style={styles.submitBtnText}>DONE</Text>
               </TouchableOpacity>
             </View>
@@ -825,6 +952,10 @@ export default function App() {
                   return lcNode ? parseFloat(getNodeAvg(lcNode)) : lastCycleAction.nodeAvgBefore;
                 })(),
               } : null}
+              nodeBubbles={nodeBubbles}
+              focusCoordinate={focusCoordinate}
+              systemTrajectory={systemTrajectory}
+              allCoordinates={allCoordinates}
             />
             </View>
           </FadingBorder>
@@ -864,7 +995,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 },
   headerLeft: { flex: 1 },
   headerTitle: { color: 'white', fontSize: 32, fontWeight: '200', letterSpacing: 6 },
-  headerSubtitle: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2 },
   headerInfoBtn: { padding: 4 },
 
   // Nav
@@ -920,14 +1050,26 @@ const styles = StyleSheet.create({
   infoDoneText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
 
   // Add / edit node card
-  addNodeCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
-  addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
+  addNodeCard: { backgroundColor: THEME.card, borderRadius: 14, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  addNodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  addNodeHeaderLabel: { color: 'rgba(255,255,255,0.35)', fontSize: 11, fontWeight: '700', letterSpacing: 2.5, textTransform: 'uppercase' },
+  addNodeHeaderDot: { width: 10, height: 10, borderRadius: 5 },
+  addNodeDivider: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', marginVertical: 16 },
+  addNodeColorRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20, gap: 10 },
   addNodeSwatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent', marginRight: 10, marginBottom: 10 },
   addNodeSwatchSelected: { borderColor: '#E2E8F0' },
 
   // Form shared
   editFormLabel: { color: 'white', fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
   editFormInput: { color: 'white', fontSize: 16, fontWeight: '500', paddingVertical: 12, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', marginBottom: 20 },
+  effortPickerRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  effortPickerBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  effortPickerBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  editDestructiveRow: { flexDirection: 'row', gap: 8, marginBottom: 12, marginTop: 4 },
+  editArchiveBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(100,116,139,0.5)', borderRadius: 10 },
+  editArchiveBtnText: { color: 'rgba(148,163,184,0.9)', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  editDeleteBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)', borderRadius: 10 },
+  editDeleteBtnText: { color: 'rgba(239,68,68,0.9)', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
   evidenceLabel: { color: 'white', fontSize: 14, fontWeight: '700', letterSpacing: 2, marginTop: 14, marginBottom: 6 },
   evidenceInput: { color: THEME.border, fontSize: 14, fontWeight: '700', letterSpacing: 2, paddingVertical: 8, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)' },
   evidencePreview: { color: THEME.textDim, fontSize: 14, letterSpacing: 1 },

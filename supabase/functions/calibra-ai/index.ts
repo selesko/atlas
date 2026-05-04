@@ -18,30 +18,43 @@ interface NodeIntentResponse { guidance: string; }
 // ─── Persona headers per tab ──────────────────────────────────────────────────
 
 const HEADERS: Record<string, Record<string, string>> = {
-  briefing: {
-    Engineer: 'SYSTEM STATUS',
-    Spiritual: 'FIELD READING',
-    Seeker: 'SIGNAL LOG',
-  },
-  nodeDiagnostic: {
-    Engineer: 'NODE DIAGNOSTIC',
-    Spiritual: 'NODE RESONANCE',
-    Seeker: 'NODE EXPLORER',
-  },
-  taskDispatch: {
-    Engineer: 'TASK DISPATCH',
-    Spiritual: 'TASK FLOW',
-    Seeker: 'TASK DISCOVERY',
-  },
+  briefing:       { Engineer: 'REFLECTION', Spiritual: 'READING',   Seeker: 'REFLECTION' },
+  nodeDiagnostic: { Engineer: 'REFLECTION', Spiritual: 'RESONANCE', Seeker: 'REFLECTION' },
+  taskDispatch:   { Engineer: 'REFLECTION', Spiritual: 'FLOW',      Seeker: 'REFLECTION' },
 };
 
-// ─── Persona voice descriptors ────────────────────────────────────────────────
+// ─── Persona voice ────────────────────────────────────────────────────────────
 
 const PERSONA_VOICE: Record<string, string> = {
-  Engineer: 'precise and systems-oriented — reference patterns, leverage points, and what to optimise. Avoid fluff.',
-  Spiritual: 'reflective and holistic — acknowledge the inner dimension, speak to meaning and resistance, not just mechanics.',
-  Seeker: 'curious and exploratory — frame things as questions or possibilities, encourage discovery over prescription.',
+  Engineer:  'Direct and precise. Root the observation in actual numbers and names. No jargon, no drama — just what the data is saying and where to go.',
+  Seeker:    'Honest and curious. Point toward the growth edge. Frame the observation as an opening, not a verdict. Ask the real question underneath the data.',
+  Spiritual: 'Grounded and metaphorical. Find the meaning in the pattern. Speak to energy, the body, or natural cycles when it fits. Never clinical, never vague.',
 };
+
+// ─── Insight type guidance ────────────────────────────────────────────────────
+
+const INSIGHT_TYPE_GUIDE = `
+Choose ONE insight type based on what the data actually warrants:
+
+SIGNAL — use when something clear and specific is true right now. A direct, honest observation. Ends with what it points toward.
+  Good: "Sleep has been pulling everything else down. That's the one to look at."
+  Bad: "Your system avg is 6.2."
+
+TENSION — use when there's a real gap or friction. Something is unaddressed, off, or contradicted. Be specific — name the actual area.
+  Good: "You have intentions for Health but nothing in place to back them up."
+  Bad: "Some areas need attention."
+
+REVEAL — use when there's a reframe worth offering. A different way to see what the pattern is showing. The kind of observation that makes someone pause.
+  Good: "Movement keeps coming up as the gap. Maybe the question isn't how to fix it — it's whether you actually want to."
+  Bad: "Consider your relationship with exercise."
+
+Rules for the insight text:
+- Sentence case — NOT ALL CAPS
+- Specific — use the actual area names from the data, not generic terms
+- Plain language — no "system", "drift", "calibrated", "velocity", "threshold", "coordinates"
+- 1–2 sentences max. The first sentence is the observation. The second (optional) is what it points toward.
+- The whole card answers one question: where should I put my energy right now?
+`;
 
 // ─── Node summary helper ──────────────────────────────────────────────────────
 
@@ -61,7 +74,6 @@ function nodesSummaryText(nodes: any[]): string {
 function buildAtlasBriefingPrompt(body: Record<string, unknown>): string {
   const nodes = (body.nodes as any[]) ?? [];
   const persona = (body.persona as string) ?? 'Seeker';
-  const cognitiveModel = body.cognitiveModel ?? 'Architect';
   const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
   const nodesSummary = nodesSummaryText(nodes);
 
@@ -71,45 +83,54 @@ function buildAtlasBriefingPrompt(body: Record<string, unknown>): string {
       / nodes.length).toFixed(1)
     : '0.0';
 
-  const allAboveThreshold = nodes.every((n: any) => n.goals.every((g: any) => Number(g.value) >= 6));
-  const atlasHealthy = parseFloat(totalAvg) >= 7.5 && allAboveThreshold;
-  const toneHint = atlasHealthy
-    ? 'The atlas is HEALTHY — acknowledge momentum, reinforce what is working, and suggest how to deepen or sustain it. Do NOT manufacture a problem.'
-    : 'Identify the most important gap or drift to address.';
+  const lowestNode = nodes.length
+    ? [...nodes].sort((a: any, b: any) => {
+        const avgA = a.goals.reduce((s: number, g: any) => s + Number(g.value), 0) / (a.goals.length || 1);
+        const avgB = b.goals.reduce((s: number, g: any) => s + Number(g.value), 0) / (b.goals.length || 1);
+        return avgA - avgB;
+      })[0]
+    : null;
 
-  return `You are a personal performance co-pilot for a self-improvement app called Calibra. Analyze the user's overall life balance (their Atlas) and generate a brief, persona-aware overview.
+  return `You are a reflection guide inside an app called Calibra. The user tracks life areas (like Work, Health, Relationships) and scores how they're doing in each one.
 
-USER PROFILE:
-- Cognitive archetype: ${cognitiveModel}
-- Persona: ${persona}
-- Voice tone: ${voice}
+The user just opened their reflection card. Your job: help them answer "where should I put my energy right now?"
 
-LIFE NODES (overall avg: ${totalAvg}/10):
-${nodesSummary || 'No nodes defined yet.'}
+PERSONA: ${persona}
+VOICE: ${voice}
 
-TONE DIRECTION: ${toneHint}
+LIFE AREA DATA (overall avg: ${totalAvg}/10):
+${nodesSummary || 'No areas defined yet.'}
+${lowestNode ? `Lowest area: ${lowestNode.name}` : ''}
 
-Return ONLY a valid JSON object — no markdown, no explanation:
+${INSIGHT_TYPE_GUIDE}
+
+Return ONLY valid JSON — no markdown, no explanation:
 {
   "stats": [
-    { "label": "ATLAS AVG", "value": "${totalAvg}" },
-    { "label": "NODES", "value": "${nodes.length}" }
+    { "label": "OVERALL", "value": "${totalAvg}" },
+    { "label": "AREAS", "value": "${nodes.length}" }
   ],
   "lines": [
-    { "prefix": "> STATUS:", "text": "ONE PUNCHY ALL-CAPS SENTENCE THAT HONESTLY REFLECTS THE ATLAS STATE — AFFIRMING IF HEALTHY, DIAGNOSTIC IF NOT." },
-    { "prefix": "> FOCUS:", "text": "ONE ALL-CAPS SENTENCE — EITHER REINFORCE MOMENTUM OR REDIRECT ENERGY, BASED ON THE ACTUAL DATA." }
+    {
+      "prefix": "SIGNAL" | "TENSION" | "REVEAL",
+      "text": "Your insight here — sentence case, 1–2 sentences, specific to the actual data, written in the ${persona} voice."
+    },
+    {
+      "prefix": "MORE",
+      "text": "One additional sentence of context or depth for users who want to go further. Sentence case."
+    }
   ],
   "actions": [
-    { "label": "Specific action matching the tone above (sentence case, ≤12 words)", "action": "calibrate", "nodeId": "<exact node id from data>" },
-    { "label": "Specific action to add or deepen a calibration (sentence case, ≤12 words)", "action": "addCalibration", "nodeId": "<exact node id from data>", "goalId": "<exact goal id from data>" }
+    { "label": "What to do next (sentence case, plain language, ≤10 words)", "action": "calibrate", "nodeId": "<exact id from data>" },
+    { "label": "A second option (sentence case, plain language, ≤10 words)", "action": "addCalibration", "nodeId": "<exact id from data>", "goalId": "<exact goal id from data>" }
   ]
 }
 
-Rules:
-- lines[].text MUST be ALL CAPS, terminal-style, specific to actual data
-- action labels are sentence case, concrete, motivating, ≤12 words
-- nodeId and goalId MUST be copied verbatim from the IDs shown in brackets
-- Match the ${persona} persona voice tone throughout`;
+Strict rules:
+- prefix must be exactly one of: SIGNAL, TENSION, REVEAL — based on which type fits best
+- text is sentence case, plain language, no jargon
+- action labels are plain — say what the person should actually do, not app terminology
+- nodeId and goalId must be exact IDs from the brackets in the data above`;
 }
 
 function buildNodeDiagnosticPrompt(body: Record<string, unknown>): string {
@@ -118,45 +139,55 @@ function buildNodeDiagnosticPrompt(body: Record<string, unknown>): string {
   const voice = PERSONA_VOICE[persona] ?? PERSONA_VOICE['Seeker'];
   const nodesSummary = nodesSummaryText(nodes);
 
-  const belowThreshold = nodes.flatMap((n: any) => n.goals.filter((g: any) => Number(g.value) < 6)).length;
-  const noCalibrations = nodes.flatMap((n: any) => n.goals.filter((g: any) => (g.calibrationCount ?? (g.actions?.length ?? 0)) === 0)).length;
-  const nodesHealthy = belowThreshold === 0 && noCalibrations === 0;
-  const toneHint = nodesHealthy
-    ? 'All coordinates are above threshold and have calibrations — acknowledge the strong state, reinforce consistency, and suggest how to push further. Do NOT invent a problem.'
-    : 'Identify the most important gap to address.';
+  const lowAreas = nodes.filter((n: any) => {
+    const avg = n.goals.reduce((s: number, g: any) => s + Number(g.value), 0) / (n.goals.length || 1);
+    return avg < 6;
+  });
+  const noActions = nodes.flatMap((n: any) =>
+    n.goals.filter((g: any) => (g.calibrationCount ?? (g.actions?.length ?? 0)) === 0)
+  ).length;
 
-  return `You are a personal performance co-pilot for Calibra. Analyze the user's coordinate scores and generate a diagnostic report.
+  return `You are a reflection guide inside Calibra. The user is looking at their life areas and the individual things they track within each one.
 
-COORDINATE DATA:
-${nodesSummary || 'No nodes defined yet.'}
+Your job: help them answer "where should I put my energy right now?" — at the level of specific areas and what's inside them.
 
-QUICK STATS: ${belowThreshold} coordinates below threshold (score < 6), ${noCalibrations} with no calibrations.
-TONE DIRECTION: ${toneHint}
+PERSONA: ${persona}
+VOICE: ${voice}
 
-Persona: ${persona}
-Voice tone: ${voice}
+AREA DATA:
+${nodesSummary || 'No areas defined yet.'}
 
-Return ONLY a valid JSON object — no markdown:
+CONTEXT: ${lowAreas.length} area(s) scoring below 6${lowAreas.length ? ` (${lowAreas.map((n: any) => n.name).join(', ')})` : ''}. ${noActions} tracked item(s) with no actions behind them.
+
+${INSIGHT_TYPE_GUIDE}
+
+Return ONLY valid JSON — no markdown:
 {
   "stats": [
-    { "label": "BELOW 6", "value": "${belowThreshold}" },
-    { "label": "NO CALIBRATIONS", "value": "${noCalibrations}" }
+    { "label": "BELOW 6", "value": "${lowAreas.length}" },
+    { "label": "NO ACTIONS", "value": "${noActions}" }
   ],
   "lines": [
-    { "prefix": "> SCAN:", "text": "ONE ALL-CAPS SENTENCE — AFFIRMING IF HEALTHY, DIAGNOSTIC IF NOT. SPECIFIC TO ACTUAL DATA." },
-    { "prefix": "> SIGNAL:", "text": "ONE ALL-CAPS SENTENCE — REINFORCE MOMENTUM OR NAME THE HIGHEST-LEVERAGE FIX. SPECIFIC TO ACTUAL DATA." }
+    {
+      "prefix": "SIGNAL" | "TENSION" | "REVEAL",
+      "text": "Your insight here — sentence case, 1–2 sentences, specific to the actual area names and scores, written in the ${persona} voice."
+    },
+    {
+      "prefix": "MORE",
+      "text": "One additional sentence of depth. Sentence case."
+    }
   ],
   "actions": [
-    { "label": "Action matching the tone above for the most relevant coordinate (sentence case, ≤12 words)", "action": "calibrate", "nodeId": "<exact node id>" },
-    { "label": "Action to add or strengthen a calibration (sentence case, ≤12 words)", "action": "addCalibration", "nodeId": "<exact node id>", "goalId": "<exact goal id>" }
+    { "label": "What to do next (plain language, ≤10 words)", "action": "calibrate", "nodeId": "<exact id>" },
+    { "label": "A second option (plain language, ≤10 words)", "action": "addCalibration", "nodeId": "<exact id>", "goalId": "<exact goal id>" }
   ]
 }
 
-Rules:
-- lines are ALL CAPS, specific to actual coordinate data
-- action labels are sentence case, concrete, ≤12 words
-- nodeId/goalId must be exact IDs from the data
-- Match the ${persona} persona voice`;
+Strict rules:
+- prefix must be exactly: SIGNAL, TENSION, or REVEAL
+- text is sentence case, uses real area names from the data, no jargon
+- action labels describe what the person actually does, not app mechanics
+- nodeId and goalId must be exact IDs from the data`;
 }
 
 function buildTaskDispatchPrompt(body: Record<string, unknown>): string {
@@ -172,54 +203,70 @@ function buildTaskDispatchPrompt(body: Record<string, unknown>): string {
   const completed = allActions.filter((a: any) => a.completed).length;
   const pending = allActions.filter((a: any) => !a.completed).length;
 
-  const actionsSummary = nodes.map((n: any) => {
-    const coordLines = n.goals.map((g: any) => {
+  const pendingSummary = nodes.map((n: any) => {
+    const lines = n.goals.map((g: any) => {
       const pend = (g.actions ?? []).filter((a: any) => !a.completed);
       if (!pend.length) return null;
       const titles = pend.slice(0, 3).map((a: any) => `"${a.title}"`).join(', ');
-      return `  [${n.id}] ${n.name} / [${g.id}] ${g.name}: ${pend.length} pending — ${titles}`;
+      return `  [${n.id}] ${n.name} / [${g.id}] ${g.name}: ${pend.length} open — ${titles}`;
     }).filter(Boolean).join('\n');
-    return coordLines || null;
+    return lines || null;
   }).filter(Boolean).join('\n');
 
-  const actionsHealthy = pending === 0 && completed > 0;
-  const actionToneHint = actionsHealthy
-    ? 'The backlog is CLEAR and completions are up — acknowledge the clean state, affirm the velocity, suggest what to build on next. Do NOT invent urgency.'
-    : pending > 0
-      ? 'Identify what to act on now.'
-      : 'No actions exist yet — suggest deploying the first one.';
+  // Find the area with the most open actions — the most loaded
+  const mostLoaded = nodes.reduce((best: any, n: any) => {
+    const openCount = n.goals.reduce((s: number, g: any) =>
+      s + (g.actions ?? []).filter((a: any) => !a.completed).length, 0);
+    return (!best || openCount > best.count) ? { node: n, count: openCount } : best;
+  }, null);
 
-  return `You are a personal performance co-pilot for Calibra. Analyze the user's action backlog and generate a dispatch report.
+  // Find the area with no actions at all — the most neglected
+  const mostNeglected = nodes.find((n: any) =>
+    n.goals.every((g: any) => (g.actions ?? []).length === 0)
+  ) ?? null;
+
+  return `You are a reflection guide inside Calibra. The user is looking at their open actions — things they've committed to doing to improve specific areas of their life.
+
+Your job: help them answer "where should I put my energy right now?" at the level of what to actually do next.
+
+PERSONA: ${persona}
+VOICE: ${voice}
 
 ACTION DATA:
-Total: ${completed} completed, ${pending} pending
-${actionsSummary || 'No pending actions.'}
+${completed} done, ${pending} still open
+${pendingSummary || 'No open actions.'}
+${mostLoaded ? `Most loaded area: ${mostLoaded.node.name} (${mostLoaded.count} open)` : ''}
+${mostNeglected ? `Area with nothing in place: ${mostNeglected.name}` : ''}
 
-TONE DIRECTION: ${actionToneHint}
-Persona: ${persona}
-Voice tone: ${voice}
+${INSIGHT_TYPE_GUIDE}
 
-Return ONLY a valid JSON object — no markdown:
+Return ONLY valid JSON — no markdown:
 {
   "stats": [
-    { "label": "COMPLETED", "value": "${completed}" },
-    { "label": "PENDING", "value": "${pending}" }
+    { "label": "DONE", "value": "${completed}" },
+    { "label": "OPEN", "value": "${pending}" }
   ],
   "lines": [
-    { "prefix": "> VELOCITY:", "text": "ONE ALL-CAPS SENTENCE — AFFIRMING IF BACKLOG IS CLEAR, DIRECTIONAL IF NOT. SPECIFIC TO DATA." },
-    { "prefix": "> DISPATCH:", "text": "ONE ALL-CAPS SENTENCE — EITHER REINFORCE MOMENTUM OR NAME THE TOP PRIORITY. SPECIFIC TO DATA." }
+    {
+      "prefix": "SIGNAL" | "TENSION" | "REVEAL",
+      "text": "Your insight here — sentence case, 1–2 sentences, specific to the actual actions and areas, written in the ${persona} voice."
+    },
+    {
+      "prefix": "MORE",
+      "text": "One additional sentence of depth. Sentence case."
+    }
   ],
   "actions": [
-    { "label": "Action matching the tone above (sentence case, ≤12 words)", "action": "prioritize", "nodeId": "<exact node id>", "goalId": "<exact goal id>" },
-    { "label": "Action to deploy or deepen a calibration (sentence case, ≤12 words)", "action": "deployTask", "nodeId": "<exact node id>", "goalId": "<exact goal id>" }
+    { "label": "What to do right now (plain language, ≤10 words)", "action": "prioritize", "nodeId": "<exact id>", "goalId": "<exact goal id>" },
+    { "label": "Something to add or build on (plain language, ≤10 words)", "action": "deployTask", "nodeId": "<exact id>", "goalId": "<exact goal id>" }
   ]
 }
 
-Rules:
-- lines are ALL CAPS, specific to actual task data
-- action labels are sentence case, specific, ≤12 words
-- nodeId/goalId must be exact IDs from the data
-- Match the ${persona} persona voice`;
+Strict rules:
+- prefix must be exactly: SIGNAL, TENSION, or REVEAL
+- text is sentence case, plain language, uses real names from the data
+- action labels describe what the person actually does
+- nodeId and goalId must be exact IDs from the data`;
 }
 
 function buildNodeIntentPrompt(body: Record<string, unknown>): string {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
   PanResponder, Animated, Pressable, StyleSheet as RNStyleSheet, Easing
@@ -6,6 +6,7 @@ import {
 import Svg, {
   Circle, Polygon, G, Rect, Path, Defs,
   RadialGradient, Stop, Line, LinearGradient,
+  Text as SvgText,
 } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAppStore } from '../stores/useAppStore';
@@ -14,10 +15,80 @@ import { THEME } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
 import { Radar } from '../components/Radar';
-import { AtlasGraphView, Node } from '../types';
+import { AtlasGraphView, Node, Goal, Action, ActionEffort } from '../types';
 
 const { width } = Dimensions.get('window');
 const STARFIELD_HEIGHT = 360;
+
+// ─── Real trajectory helpers ──────────────────────────────────────────────────
+
+/** Returns the past N days as YYYY-MM-DD strings, oldest first. */
+function getPastDays(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (n - 1 - i));
+    return d.toISOString().split('T')[0];
+  });
+}
+
+/**
+ * For a single coordinate, return the best known score for a given day.
+ * Walks scoreHistory for the most recent entry on or before that day.
+ * Falls back to the current value if no history exists yet.
+ */
+function scoreForDay(goal: Goal, day: string): number {
+  const hist = goal.scoreHistory;
+  if (!hist || hist.length === 0) return goal.value;
+  const candidates = hist
+    .filter(h => h.date.split('T')[0] <= day)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  return candidates.length > 0 ? candidates[0].value : goal.value;
+}
+
+/**
+ * Compute a 7-point trajectory for a single node.
+ * Each point is the average coordinate score for that day.
+ */
+function getNodeTrajectory(node: Node): number[] {
+  const days = getPastDays(7);
+  if (node.goals.length === 0) return Array(7).fill(0);
+  return days.map(day => {
+    const scores = node.goals.map(g => scoreForDay(g, day));
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
+  });
+}
+
+/**
+ * System-wide 7-day trajectory: average node trajectory across all nodes.
+ * Returns 7 values (oldest → today), each clamped 0–10.
+ */
+function getSystemTrajectory(nodes: Node[]): number[] {
+  if (nodes.length === 0) return Array(7).fill(0);
+  const nodeTrajs = nodes.map(getNodeTrajectory);
+  return Array.from({ length: 7 }, (_, i) =>
+    Math.min(10, Math.max(0,
+      nodeTrajs.reduce((s, t) => s + t[i], 0) / nodes.length
+    ))
+  );
+}
+
+/** Build a smooth cubic bezier SVG path through an array of {x,y} points. */
+function buildCurvePath(pts: Array<{ x: number; y: number }>): string {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
 
 
 interface CopilotAction {
@@ -27,11 +98,26 @@ interface CopilotAction {
   goalId?: string;
 }
 
+// ─── Effort constants (used in popup orbital graphic) ────────────────────────
+
+const EFFORT_WEIGHT: Record<ActionEffort, number> = { easy: 1, medium: 2, heavy: 3 };
+const EFFORT_ANGLE_OFFSET: Record<ActionEffort, number> = {
+  easy:   0,
+  medium: Math.PI / 3,
+  heavy:  (2 * Math.PI) / 3,
+};
+// Fixed radii for single-node popup (no spacing constraint)
+const POPUP_EFFORT_ORBIT: Record<ActionEffort, number> = { easy: 24, medium: 38, heavy: 52 };
+const POPUP_EFFORT_DOT_R: Record<ActionEffort, number> = { easy: 2.5, medium: 4, heavy: 6 };
+const POPUP_EFFORT_DOT_OP: Record<ActionEffort, number> = { easy: 0.32, medium: 0.65, heavy: 1.0 };
+
 interface AtlasScreenProps {
   guidanceActions: CopilotAction[];
   onAction: (a: CopilotAction) => void;
   onOpenCoordinate?: (nodeId: string, goalId: string) => void;
   onOpenAction?: (nodeId: string, goalId: string, actionId: string) => void;
+  onGoToNode?: (nodeId: string) => void;
+  onGoToActions?: (nodeId: string) => void;
 }
 
 const ACTION_BTN_LABELS: Record<string, string> = {
@@ -46,6 +132,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   onAction,
   onOpenCoordinate,
   onOpenAction,
+  onGoToNode,
+  onGoToActions,
 }) => {
   const { nodes, getNodeAvg, themeMode, persona } = useAppStore();
   const theme = useTheme();
@@ -150,63 +238,44 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   }), [nodes]);
 
 
-  const TRAJ_CHART_H = 156;
-  const TRAJ_PLOT_H = 196;
-  const trajectoryX = (i: number) => (i / 6) * 320;
-  const trajectoryY = (v: number) => 24 + (1 - v / 10) * TRAJ_CHART_H;
+  // ── Real 7-day system trajectory ─────────────────────────────────────────────
+  const SPARKLINE_W = 80;
+  const SPARKLINE_H = 28;
 
-  const trajectoryDataPerNode = nodes.map(n => {
-    const cur = parseFloat(getNodeAvg(n));
-    const base = cur - 0.5;
-    return [base, base + 0.2, base + 0.1, base + 0.3, base + 0.2, base + 0.3, cur];
-  });
+  const systemTrajectory = useMemo(() => getSystemTrajectory(nodes), [nodes]);
 
-  const averageData = [0, 1, 2, 3, 4, 5, 6].map(i =>
-    trajectoryDataPerNode.reduce((s, arr) => s + arr[i], 0) / (nodes.length || 1)
-  );
+  const sparkPts = systemTrajectory.map((v, i) => ({
+    x: (i / 6) * SPARKLINE_W,
+    y: SPARKLINE_H - (v / 10) * SPARKLINE_H,
+  }));
+  const sparkPath = buildCurvePath(sparkPts);
 
-  const interpolatedAvg = (x: number) => {
-    if (x <= 0) return averageData[0];
-    if (x >= 320) return averageData[6];
-    const i = (x / 320) * 6;
-    const i0 = Math.floor(i);
-    const i1 = Math.min(i0 + 1, 6);
-    return averageData[i0] * (1 - (i - i0)) + averageData[i1] * (i - i0);
-  };
-
-
-
-  const buildCurvePath = (pts: Array<{ x: number; y: number }>) => {
-    if (pts.length < 2) return '';
-    let d = `M ${pts[0].x} ${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[Math.max(0, i - 1)];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[Math.min(pts.length - 1, i + 2)];
-      const c1x = p1.x + (p2.x - p0.x) / 6;
-      const c1y = p1.y + (p2.y - p0.y) / 6;
-      const c2x = p2.x - (p3.x - p1.x) / 6;
-      const c2y = p2.y - (p3.y - p1.y) / 6;
-      d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
-    }
-    return d;
-  };
-
-  const avgPts = averageData.map((v, i) => ({ x: trajectoryX(i), y: trajectoryY(v) }));
-  const avgPath = buildCurvePath(avgPts);
+  // Trend: positive if today > 3-day-ago average
+  const trendUp = systemTrajectory[6] >= systemTrajectory[3];
+  const trendDelta = +(systemTrajectory[6] - systemTrajectory[0]).toFixed(1);
+  const trendDeltaStr = trendDelta > 0 ? `+${trendDelta}` : `${trendDelta}`;
 
   return (
     <>
       {/* System Status */}
       <GlassCard style={styles.systemManifestCard}>
-        <View style={styles.systemManifestPrimaryRow}>
-          <View style={styles.systemManifestLeft}>
+        {/* Top row: label + score + delta + trend tag */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.systemManifestBracketLabel, { color: theme.textMuted }]}>{getSystemStatusLabel()}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text style={[styles.systemManifestBracketValue, { color: theme.text }]}>{systemBalance}</Text>
+              {trendDelta !== 0 && (
+                <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 }}>
+                  {trendDeltaStr}
+                </Text>
+              )}
+            </View>
           </View>
-          <View style={[styles.systemManifestVLine, { backgroundColor: theme.divider }]} />
-          <View style={styles.systemManifestStatusBlock}>
-            <Text style={[styles.systemManifestBracketValue, { color: theme.text }]}>{systemBalance}</Text>
+          <View style={{ paddingBottom: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: trendUp ? 'rgba(74,222,128,0.1)' : 'rgba(251,113,133,0.1)' }}>
+            <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>
+              7-DAY {trendUp ? '↑' : '↓'}
+            </Text>
           </View>
         </View>
       </GlassCard>
@@ -303,7 +372,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         }
                       }
                       if (clickedNode) {
-                        setAtlasHighlightId(clickedNode.id);
                         const fullNode = nodes.find(n => n.id === clickedNode.id);
                         if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
                       } else {
@@ -373,49 +441,162 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
             {selectedEntity && (() => {
               const activeNodeForColor = nodes.find(n => n.id === (atlasHighlightId || nodes[0]?.id));
               const entityColor = selectedEntity.type === 'node' ? selectedEntity.data.color : activeNodeForColor?.color || THEME.accent;
+
+              // Node tap — expanded card with orbital graphic, coordinate bars, two nav buttons
+              if (selectedEntity.type === 'node') {
+                const node = selectedEntity.data;
+
+                // Build action lists for the orbital graphic
+                const allNodeActions = node.goals.flatMap((g: any) =>
+                  g.actions.filter((a: any) => !a.archived)
+                );
+                const easyActs   = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'easy');
+                const mediumActs = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'medium');
+                const heavyActs  = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'heavy');
+
+                const PW = 280; const PH = 150;
+                const PCX = PW / 2; const PCY = PH / 2;
+
+                const renderOrbitalSats = (acts: any[], effort: ActionEffort) =>
+                  acts.map((action: any, ai: number) => {
+                    const angle =
+                      (ai / Math.max(acts.length, 1)) * Math.PI * 2 +
+                      EFFORT_ANGLE_OFFSET[effort] + 0.3;
+                    const r = POPUP_EFFORT_ORBIT[effort];
+                    const ax = PCX + r * Math.cos(angle);
+                    const ay = PCY + r * Math.sin(angle);
+                    const dotR = POPUP_EFFORT_DOT_R[effort];
+                    return (
+                      <G key={action.id}>
+                        {effort === 'heavy' && (
+                          <Circle cx={ax} cy={ay} r={dotR * 2.4} fill="url(#ph)" />
+                        )}
+                        <Circle cx={ax} cy={ay} r={dotR} fill={node.color} opacity={POPUP_EFFORT_DOT_OP[effort]} />
+                      </G>
+                    );
+                  });
+
+                return (
+                  <Pressable
+                    style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'center', alignItems: 'center', padding: 16 }]}
+                    onPress={() => setSelectedEntity(null)}
+                  >
+                    <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
+                      <View style={{ backgroundColor: 'rgba(10,18,36,0.97)', borderRadius: 24, borderWidth: 1, borderColor: node.color + '55', overflow: 'hidden' }}>
+
+                        {/* Header */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: node.color }} />
+                            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', letterSpacing: 1.5 }}>{node.name.toUpperCase()}</Text>
+                          </View>
+                          <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                            <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Orbital action graphic */}
+                        <View style={{ borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: node.color + '25' }}>
+                          <Svg width="100%" height={PH} viewBox={`0 0 ${PW} ${PH}`} preserveAspectRatio="xMidYMid meet">
+                            <Defs>
+                              <RadialGradient id="ph" cx="50%" cy="50%" r="50%">
+                                <Stop offset="0%" stopColor={node.color} stopOpacity="0.28" />
+                                <Stop offset="100%" stopColor={node.color} stopOpacity="0" />
+                              </RadialGradient>
+                            </Defs>
+                            {/* Faint orbit rings */}
+                            {easyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.easy}   stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.14} />}
+                            {mediumActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.medium} stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.10} />}
+                            {heavyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.heavy}  stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.07} />}
+                            {/* Central node star */}
+                            <Circle cx={PCX} cy={PCY} r={16} fill={node.color} opacity={0.10} />
+                            <Circle cx={PCX} cy={PCY} r={5.5} fill={node.color} opacity={0.95} />
+                            {/* Satellites */}
+                            {renderOrbitalSats(easyActs,   'easy')}
+                            {renderOrbitalSats(mediumActs, 'medium')}
+                            {renderOrbitalSats(heavyActs,  'heavy')}
+                            {allNodeActions.length === 0 && (
+                              <SvgText x={PCX} y={PCY + 4} fontSize={10} fill="rgba(255,255,255,0.18)" textAnchor="middle">NO ACTIONS YET</SvgText>
+                            )}
+                          </Svg>
+                        </View>
+
+                        {/* Coordinate score bars */}
+                        <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>
+                          {node.goals.map((g: any) => (
+                            <View key={g.id} style={{ marginBottom: 12 }}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                                <Text style={{ color: theme.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1.2 }}>{g.name.toUpperCase()}</Text>
+                                <Text style={{ color: theme.text, fontSize: 10, fontWeight: '700' }}>{g.value.toFixed(1)}</Text>
+                              </View>
+                              <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2 }}>
+                                <View style={{ height: 3, width: `${(g.value / 10) * 100}%`, backgroundColor: node.color, borderRadius: 2, opacity: 0.75 }} />
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+
+                        {/* Nav buttons */}
+                        <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 18, paddingTop: 4 }}>
+                          <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: node.color + '44', alignItems: 'center' }}
+                            onPress={() => { setSelectedEntity(null); onGoToNode?.(node.id); }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>NODE</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: node.color + '18', borderWidth: 1, borderColor: node.color + '66', alignItems: 'center' }}
+                            onPress={() => { setSelectedEntity(null); onGoToActions?.(node.id); }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>ACTIONS</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </Pressable>
+                  </Pressable>
+                );
+              }
+
+              // Coordinate / action taps — existing compact card
               return (
-              <Pressable 
-                style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'flex-end', padding: 16 }]} 
+              <Pressable
+                style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'center', alignItems: 'center', padding: 24 }]}
                 onPress={() => setSelectedEntity(null)}
               >
-                <Pressable onPress={(e) => e.stopPropagation()}>
+                <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
                   <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: entityColor, borderWidth: 1, borderRadius: 24, shadowColor: entityColor, shadowOpacity: 0.25, shadowRadius: 15 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }}>
-                        {selectedEntity.type === 'node' ? selectedEntity.data.name.toUpperCase() : selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
+                        {selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
                       </Text>
                       <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{top:15,bottom:15,left:15,right:15}}>
                         <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>CLOSE</Text>
                       </TouchableOpacity>
                     </View>
                     <Text style={{ color: theme.textMuted, fontSize: 13, letterSpacing: 1, fontWeight: '600' }}>
-                      {selectedEntity.type === 'node' 
-                        ? `SCORE: ${getNodeAvg(selectedEntity.data)}   •   COORDINATES: ${selectedEntity.data.goals.length}` 
-                        : selectedEntity.type === 'coordinate' 
-                        ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}` 
+                      {selectedEntity.type === 'coordinate'
+                        ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}`
                         : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
                     </Text>
-                      <TouchableOpacity 
-                        style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: `${entityColor}1A`, borderWidth: 1, borderColor: `${entityColor}66`, borderRadius: 12, alignSelf: 'flex-start' }}
-                        onPress={() => {
-                          const activeNodeId = atlasHighlightId || nodes[0]?.id;
-                          if (!activeNodeId) return;
-                          
-                          if (selectedEntity.type === 'node') {
-                            // Already focused on the node via setAtlasHighlightId, maybe just close modal or navigate
-                            setSelectedEntity(null);
-                          } else if (selectedEntity.type === 'coordinate') {
-                            onOpenCoordinate?.(activeNodeId, selectedEntity.data.id);
-                          } else {
-                            onOpenAction?.(activeNodeId, selectedEntity.data.__goalId, selectedEntity.data.id);
-                          }
-                          setSelectedEntity(null);
-                        }}
-                      >
-                        <Text style={{ color: entityColor, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
-                          {selectedEntity.type === 'node' ? 'CLOSE FOCUS' : `VIEW ${selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →`}
-                        </Text>
-                      </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: `${entityColor}1A`, borderWidth: 1, borderColor: `${entityColor}66`, borderRadius: 12, alignSelf: 'flex-start' }}
+                      onPress={() => {
+                        const activeNodeId = atlasHighlightId || nodes[0]?.id;
+                        if (!activeNodeId) return;
+                        if (selectedEntity.type === 'coordinate') {
+                          onOpenCoordinate?.(activeNodeId, selectedEntity.data.id);
+                        } else {
+                          onOpenAction?.(activeNodeId, selectedEntity.data.__goalId, selectedEntity.data.id);
+                        }
+                        setSelectedEntity(null);
+                      }}
+                    >
+                      <Text style={{ color: entityColor, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
+                        {`VIEW ${selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →`}
+                      </Text>
+                    </TouchableOpacity>
                   </GlassCard>
                 </Pressable>
               </Pressable>
@@ -444,6 +625,33 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         </View>
       </GlassCard>
 
+
+      {/* 7-day trend line */}
+      <GlassCard style={styles.trendCard}>
+        <Svg width="100%" height={44} viewBox={`0 0 ${SPARKLINE_W * 3} 44`} preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0.2" />
+              <Stop offset="100%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          {sparkPath ? (() => {
+            const scaledPts = systemTrajectory.map((v, i) => ({
+              x: (i / 6) * (SPARKLINE_W * 3),
+              y: 38 - (v / 10) * 32,
+            }));
+            const scaledPath = buildCurvePath(scaledPts);
+            const fillPath = scaledPath + ` L${SPARKLINE_W * 3} 44 L0 44 Z`;
+            return (
+              <>
+                <Path d={fillPath} fill="url(#sparkFill)" />
+                <Path d={scaledPath} stroke={trendUp ? '#4ade80' : '#fb7185'} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <Circle cx={scaledPts[6].x} cy={scaledPts[6].y} r={3.5} fill={trendUp ? '#4ade80' : '#fb7185'} />
+              </>
+            );
+          })() : null}
+        </Svg>
+      </GlassCard>
 
       {/* Atlas Guidance */}
       {guidanceActions.length > 0 && (
@@ -527,8 +735,10 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   );
 };
 
+
 const styles = StyleSheet.create({
   systemManifestCard: { borderRadius: 16, padding: 20, marginBottom: 12, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
+  trendCard: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20, marginBottom: 12, overflow: 'hidden' },
   systemManifestPrimaryRow: { flexDirection: 'row', alignItems: 'stretch' },
   systemManifestLeft: { flex: 1, justifyContent: 'center' },
   systemManifestBracketLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },

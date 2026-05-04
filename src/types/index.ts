@@ -1,3 +1,5 @@
+export type ActionEffort = 'easy' | 'medium' | 'heavy';
+
 export interface Action {
   id: string;
   title: string;
@@ -9,6 +11,8 @@ export interface Action {
   reminder?: string;
   createdAt: string;
   completedAt?: string;
+  effort?: ActionEffort;
+  archived?: boolean;
 }
 
 export interface Goal {

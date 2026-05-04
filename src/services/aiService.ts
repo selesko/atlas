@@ -36,8 +36,8 @@ export interface TabConfig {
 
 export const TAB_CONFIG: Record<string, TabConfig> = {
   Atlas:   { accentColor: '#38BDF8', icon: '◎' },
-  Nodes:   { accentColor: '#A78BFA', icon: '◈' },
-  Actions: { accentColor: '#4ADE80', icon: '◫' },
+  Nodes:   { accentColor: '#F59E0B', icon: '◈' },
+  Actions: { accentColor: '#34D399', icon: '◫' },
   Profile: { accentColor: '#38BDF8', icon: '◎' },
 };
 

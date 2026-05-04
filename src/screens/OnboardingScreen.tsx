@@ -6,7 +6,7 @@ import {
 import Svg, { Circle, Line } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '../../lib/supabase';
-import { THEME, MODEL_DESCRIPTIONS, MOTIVATOR_TENSIONS } from '../constants/theme';
+import { THEME, PERSONA_DATA, MOTIVATOR_TENSIONS } from '../constants/theme';
 import { CognitiveModel, MotivatorChoices } from '../types';
 
 const { width, height } = Dimensions.get('window');
@@ -118,6 +118,10 @@ function MiniSlider({
         style={styles.sliderTrack}
         onLayout={e => { trackWidth.current = e.nativeEvent.layout.width; }}
         onStartShouldSetResponder={() => true}
+        onStartShouldSetResponderCapture={() => true}
+        onMoveShouldSetResponder={() => true}
+        onMoveShouldSetResponderCapture={() => true}
+        onResponderTerminationRequest={() => false}
         onResponderGrant={handlePress}
         onResponderMove={handlePress}
       >
@@ -249,27 +253,23 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
             {[
               {
                 label: 'NODE',
-                example: 'Mind',
                 desc: 'A top-level area of your life — the big categories you want to keep in balance.',
                 color: THEME.mind,
               },
               {
                 label: 'COORDINATE',
-                example: 'Meditation',
                 desc: 'The specific pillars that make up each node. These are what you actually score.',
                 color: THEME.body,
               },
               {
-                label: 'TASK',
-                example: '10m focus session',
-                desc: 'The daily actions that move your coordinates. Evidence that justifies your score.',
+                label: 'ACTION',
+                desc: 'The concrete things you do to move a coordinate. Completing actions keeps your system in motion.',
                 color: THEME.home,
               },
             ].map((item, i) => (
               <View key={i} style={[styles.systemRow, { borderLeftColor: item.color }]}>
                 <View style={styles.systemRowHeader}>
                   <Text style={[styles.systemLabel, { color: item.color }]}>{item.label}</Text>
-                  <Text style={styles.systemExample}>"{item.example}"</Text>
                 </View>
                 <Text style={styles.systemDesc}>{item.desc}</Text>
               </View>
@@ -332,28 +332,28 @@ export function OnboardingScreen({ onComplete, initialNodes }: Props) {
         {step === 3 && (
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <Text style={styles.stepLabel}>STEP 2 OF 4</Text>
-            <Text style={styles.stepTitle}>Your operating profile</Text>
+            <Text style={styles.stepTitle}>Your persona</Text>
             <Text style={styles.stepBody}>
-              This shapes how the AI co-pilot talks to you and what it prioritizes.
+              Calibra has three personas that shape how the AI co-pilot speaks to you. Your persona is determined automatically by the motivator choices below — no manual selection needed.
             </Text>
 
-            {/* Cognitive Model */}
-            <Text style={styles.sectionLabel}>ARCHETYPE</Text>
-            <View style={styles.modelGrid}>
-              {(['Architect', 'Strategist', 'Builder', 'Analyst'] as CognitiveModel[]).map(m => (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.modelCard, cogModel === m && styles.modelCardActive]}
-                  onPress={() => { setCogModel(m); Haptics.selectionAsync(); }}
-                >
-                  <Text style={[styles.modelName, cogModel === m && styles.modelNameActive]}>{m.toUpperCase()}</Text>
-                  <Text style={styles.modelDesc} numberOfLines={2}>{MODEL_DESCRIPTIONS[m]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* Persona cards — informational only */}
+            {([
+              { key: 'Engineer', color: THEME.mind },
+              { key: 'Seeker',   color: THEME.accent },
+              { key: 'Spiritual', color: THEME.home },
+            ] as const).map(({ key, color }) => (
+              <View key={key} style={[styles.personaCard, { borderLeftColor: color }]}>
+                <Text style={[styles.personaName, { color }]}>{key.toUpperCase()}</Text>
+                <Text style={styles.personaLine}>{PERSONA_DATA[key].lines[0]}</Text>
+              </View>
+            ))}
 
             {/* Motivators */}
-            <Text style={styles.sectionLabel}>MOTIVATORS</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 24 }]}>MOTIVATORS — choose what resonates</Text>
+            <Text style={styles.motivatorNote}>
+              These tensions define your persona. You can update them any time in your profile.
+            </Text>
             {MOTIVATOR_TENSIONS.map(tension => {
               const choice = motivatorChoices[tension.id];
               return (
@@ -578,11 +578,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
   },
-  systemExample: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '600',
-  },
   systemDesc: {
     fontSize: 13,
     color: '#505080',
@@ -631,42 +626,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 4,
   },
-  sectionSub: {
-    fontWeight: '600',
-    color: '#303050',
-  },
-  modelGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
-  },
-  modelCard: {
-    width: (width - 64) / 2,
+  personaCard: {
+    borderLeftWidth: 3,
+    paddingLeft: 16,
+    paddingVertical: 12,
+    marginBottom: 10,
     backgroundColor: '#0c0c18',
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1a1a2e',
-    padding: 12,
   },
-  modelCardActive: {
-    borderColor: '#7C6AF7',
-    backgroundColor: '#14122e',
-  },
-  modelName: {
+  personaName: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#404068',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     marginBottom: 4,
   },
-  modelNameActive: {
-    color: '#7C6AF7',
+  personaLine: {
+    fontSize: 13,
+    color: '#505080',
+    lineHeight: 20,
+    fontStyle: 'italic',
   },
-  modelDesc: {
-    fontSize: 11,
-    color: '#303050',
-    lineHeight: 16,
+  motivatorNote: {
+    fontSize: 12,
+    color: '#404068',
+    lineHeight: 18,
+    marginBottom: 14,
+    marginTop: -4,
   },
   tensionRow: { marginBottom: 10 },
   tensionPill: { flexDirection: 'row', borderRadius: 24, borderWidth: 1, borderColor: '#1a1a2e', overflow: 'hidden', backgroundColor: '#0c0c18' },

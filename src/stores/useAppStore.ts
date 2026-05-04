@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
-import { Node, Goal, Action, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
+import { Node, Goal, Action, ActionEffort, CognitiveModel, PeakPeriod, Persona, MotivatorChoices } from '../types';
 import { ThemeMode, THEMES } from '../constants/theme';
 import { INITIAL_DATA } from '../constants/data';
 import { todayISO } from '../constants/data';
@@ -15,7 +15,6 @@ import {
   upsertProfile,
   deleteAction as syncDeleteAction,
 } from '../services/sync';
-import { useSnapshotStore, RadarSnapshot } from './useSnapshotStore';
 import { calculatePersona } from '../utils/personaCalc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,10 +57,12 @@ interface AppState {
   // Action management
   toggleAction: (nodeId: string, goalId: string, actionId: string) => void;
   togglePriority: (nodeId: string, goalId: string, actionId: string) => void;
-  addAction: (nodeId: string, goalId: string, title: string) => void;
+  addAction: (nodeId: string, goalId: string, title: string, effort?: ActionEffort) => void;
+  deleteAction: (nodeId: string, goalId: string, actionId: string) => void;
+  archiveAction: (nodeId: string, goalId: string, actionId: string) => void;
   saveActionEdit: (
     from: { nodeId: string; goalId: string; actionId: string },
-    form: { title: string; nodeId: string; goalId: string; isPriority: boolean; notes: string; dueDate: string; reminder: string }
+    form: { title: string; nodeId: string; goalId: string; isPriority: boolean; notes: string; dueDate: string; reminder: string; effort?: ActionEffort }
   ) => void;
 
   // Profile actions
@@ -168,28 +169,6 @@ export const useAppStore = create<AppState>()(
         };
       }),
     }));
-
-    // Threshold detection — snapshot when node crosses above 7.0
-    const updatedNode = get().nodes.find(n => n.id === nodeId);
-    if (updatedNode) {
-      const newAvg = updatedNode.goals.reduce((acc, g) => acc + g.value, 0) / (updatedNode.goals.length || 1);
-      if (prevAvg < 7.0 && newAvg >= 7.0) {
-        const snapshot: RadarSnapshot = {
-          id: `snap_${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          triggerNodeId: nodeId,
-          triggerNodeName: updatedNode.name,
-          triggerNodeAvg: parseFloat(newAvg.toFixed(1)),
-          nodeScores: get().nodes.map(n => ({
-            nodeId: n.id,
-            nodeName: n.name,
-            color: n.color,
-            avg: parseFloat((n.goals.reduce((acc, g) => acc + g.value, 0) / (n.goals.length || 1)).toFixed(1)),
-          })),
-        };
-        useSnapshotStore.getState().addSnapshot(snapshot);
-      }
-    }
 
     // Fire-and-forget sync
     const userId = get().session?.user.id;
@@ -334,7 +313,7 @@ export const useAppStore = create<AppState>()(
     }
   },
 
-  addAction: (nodeId, goalId, title) => {
+  addAction: (nodeId, goalId, title, effort = 'easy') => {
     const t = title.trim();
     if (!t) return;
     const newAction: Action = {
@@ -347,6 +326,7 @@ export const useAppStore = create<AppState>()(
       dueDate: '',
       reminder: '',
       createdAt: todayISO(),
+      effort,
     };
     set(state => ({
       nodes: state.nodes.map(n =>
@@ -360,6 +340,43 @@ export const useAppStore = create<AppState>()(
     }));
     const userId = get().session?.user.id;
     if (userId) upsertAction(userId, nodeId, goalId, newAction);
+  },
+
+  deleteAction: (nodeId, goalId, actionId) => {
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id !== nodeId ? n : {
+          ...n,
+          goals: n.goals.map(g =>
+            g.id !== goalId ? g : { ...g, actions: g.actions.filter(a => a.id !== actionId) }
+          ),
+        }
+      ),
+    }));
+    const userId = get().session?.user.id;
+    if (userId) syncDeleteAction(userId, actionId);
+  },
+
+  archiveAction: (nodeId, goalId, actionId) => {
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id !== nodeId ? n : {
+          ...n,
+          goals: n.goals.map(g =>
+            g.id !== goalId ? g : {
+              ...g,
+              actions: g.actions.map(a =>
+                a.id !== actionId ? a : { ...a, archived: true }
+              ),
+            }
+          ),
+        }
+      ),
+    }));
+    const userId = get().session?.user.id;
+    const node = get().nodes.find(n => n.id === nodeId);
+    const action = node?.goals.find(g => g.id === goalId)?.actions.find(a => a.id === actionId);
+    if (userId && action) upsertAction(userId, nodeId, goalId, { ...action, archived: true });
   },
 
   saveActionEdit: (from, form) => {
@@ -376,6 +393,7 @@ export const useAppStore = create<AppState>()(
       notes: form.notes || '',
       dueDate: form.dueDate || '',
       reminder: form.reminder || '',
+      ...(form.effort ? { effort: form.effort } : {}),
     };
 
     if (from.nodeId === form.nodeId && from.goalId === form.goalId) {

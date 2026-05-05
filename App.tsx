@@ -222,7 +222,7 @@ export default function App() {
       };
     }
 
-    if (activeTab === 'Nodes') {
+    if (activeTab === 'Evaluate') {
       const lowAreas = nodes.filter(n => getAvg(n) < 6);
       const noActions = nodes.flatMap(n => n.goals.filter(g => g.actions.length === 0));
       const allGood = lowAreas.length === 0 && noActions.length === 0;
@@ -240,11 +240,11 @@ export default function App() {
           { prefix: 'MORE', text: `Start with ${noActions[0]?.name ?? 'the one that matters most'}.` },
         ],
         actions: allGood ? [
-          { label: `Go deeper on ${highest?.node?.name ?? 'your strongest area'}.`, action: 'calibrate', nodeId: highest?.node?.id },
-          { label: `Add something to ${highest?.node?.goals[0]?.name ?? 'your top area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+          { label: `Add an action to keep ${highest?.node?.name ?? 'your strongest area'} moving.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+          { label: `Add something to ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'deployTask', nodeId: lowest?.node?.id, goalId: lowest?.node?.goals[0]?.id },
         ] : [
-          { label: `Update your score for ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
-          { label: `Add an action to ${noActions[0]?.name ?? 'something without one'}.`, action: 'addCalibration', nodeId: nodes.find(n => n.goals.some(g => g.actions.length === 0))?.id, goalId: noActions[0]?.id },
+          { label: `Add an action to move ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'deployTask', nodeId: lowest?.node?.id, goalId: lowest?.node?.goals[0]?.id },
+          { label: `Add an action to ${noActions[0]?.name ?? 'something without one'}.`, action: 'deployTask', nodeId: nodes.find(n => n.goals.some(g => g.actions.length === 0))?.id, goalId: noActions[0]?.id },
         ],
       };
     }
@@ -270,11 +270,11 @@ export default function App() {
         { prefix: 'MORE', text: 'Balanced but low still means something needs attention — look at which area feels most neglected.' },
       ],
       actions: isHealthy ? [
-        { label: `Go deeper on ${highest?.node?.name ?? 'your strongest area'}.`, action: 'calibrate', nodeId: highest?.node?.id },
-        { label: `Add something to ${highest?.node?.goals[0]?.name ?? 'your top area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+        { label: `Add an action to keep ${highest?.node?.name ?? 'your strongest area'} moving.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals[0]?.id },
+        { label: `Add something to ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'deployTask', nodeId: lowest?.node?.id, goalId: lowest?.node?.goals[0]?.id },
       ] : [
-        { label: `Update your score for ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'calibrate', nodeId: lowest?.node?.id },
-        { label: `Add an action to ${highest?.node?.name ?? 'your strongest area'}.`, action: 'addCalibration', nodeId: highest?.node?.id, goalId: highest?.node?.goals.find(g => g.actions.length === 0)?.id ?? highest?.node?.goals[0]?.id },
+        { label: `Add an action to move ${lowest?.node?.name ?? 'your lowest area'}.`, action: 'deployTask', nodeId: lowest?.node?.id, goalId: lowest?.node?.goals[0]?.id },
+        { label: `Add an action to ${highest?.node?.name ?? 'your strongest area'}.`, action: 'deployTask', nodeId: highest?.node?.id, goalId: highest?.node?.goals.find(g => g.actions.length === 0)?.id ?? highest?.node?.goals[0]?.id },
       ],
     };
   }, [activeTab, nodes, cognitiveModel]);
@@ -363,7 +363,7 @@ export default function App() {
       });
     }
     setCopilotOpen(false);
-    if (act.action === 'calibrate' && act.nodeId) { setActiveTab('Nodes'); setSelectedNodeId(act.nodeId); }
+    if (act.action === 'calibrate' && act.nodeId) { setActiveTab('Evaluate'); setSelectedNodeId(act.nodeId); }
     else if (act.action === 'addCalibration' && act.nodeId && act.goalId) { setAddActionTarget({ nodeId: act.nodeId, goalId: act.goalId }); setAddActionOpen(true); }
     else if (act.action === 'prioritize' && act.nodeId && act.goalId) { setEditingCoordinate({ nodeId: act.nodeId, goalId: act.goalId }); }
     else if (act.action === 'deployTask') {
@@ -469,7 +469,7 @@ export default function App() {
             <AtlasScreen
               guidanceActions={(aiCopilot && aiCopilot !== 'loading' ? aiCopilot : copilotFallback).actions}
               onAction={handleCopilotAction}
-              onGoToNode={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Nodes'); }}
+              onGoToNode={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Evaluate'); }}
               onGoToActions={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Actions'); }}
               onOpenCoordinate={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
               onOpenAction={(nodeId, goalId, actionId) => {
@@ -484,7 +484,7 @@ export default function App() {
               }}
             />
           )}
-          {activeTab === 'Nodes' && (
+          {activeTab === 'Evaluate' && (
             <NodesScreen
               selectedNodeId={selectedNodeId}
               setSelectedNodeId={setSelectedNodeId}
@@ -527,7 +527,7 @@ export default function App() {
 
       {/* Tab bar */}
       <View style={[styles.nav, { backgroundColor: theme.navGlass, borderTopColor: theme.navBorder }]}>
-        {(['Atlas', 'Nodes', 'Actions', 'Profile'] as const).map(t => {
+        {(['Atlas', 'Evaluate', 'Actions', 'Profile'] as const).map(t => {
           const active = activeTab === t;
           const c = active ? theme.accent : theme.textMuted;
           return (
@@ -539,7 +539,7 @@ export default function App() {
                     <Circle cx="60" cy="60" r="10" fill={c} />
                   </Svg>
                 )}
-                {t === 'Nodes' && (
+                {t === 'Evaluate' && (
                   <Svg width={44} height={44} viewBox="0 0 120 120">
                     <Circle cx="60" cy="60" r="40" stroke={c} strokeWidth="2" fill="none" opacity={0.25} />
                     <Circle cx="60" cy="60" r="16" fill={c} />
@@ -611,7 +611,7 @@ export default function App() {
                   <View style={[styles.addNodeHeaderDot, { backgroundColor: addNodeForm.color }]} />
                 </View>
                 <Text style={styles.editFormLabel}>NAME</Text>
-                <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={t => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Work, Health, Relationships…" placeholderTextColor={THEME.textDim} autoFocus />
+                <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={t => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Work, Health, Relationships…" placeholderTextColor={THEME.textDim} autoFocus autoCorrect={false} autoCapitalize="none" />
                 <Text style={styles.editFormLabel}>INTENT</Text>
                 <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={addNodeForm.description} onChangeText={t => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
                 <View style={styles.addNodeDivider} />
@@ -647,7 +647,7 @@ export default function App() {
                   <View style={[styles.addNodeHeaderDot, { backgroundColor: editNodeForm.color }]} />
                 </View>
                 <Text style={styles.editFormLabel}>NAME</Text>
-                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoFocus />
+                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoFocus autoCorrect={false} autoCapitalize="none" />
                 <Text style={styles.editFormLabel}>INTENT</Text>
                 <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
                 <View style={styles.addNodeDivider} />
@@ -714,6 +714,8 @@ export default function App() {
                   placeholder="Coordinate name"
                   placeholderTextColor={THEME.textDim}
                   returnKeyType="done"
+                  autoCorrect={false}
+                  autoCapitalize="none"
                   selectTextOnFocus
                 />
                 <View style={styles.sliderRow}>
@@ -800,6 +802,8 @@ export default function App() {
                 value={editForm.title}
                 onChangeText={t => setEditForm(f => ({ ...f, title: t }))}
                 placeholderTextColor={THEME.textDim}
+                autoCorrect={false}
+                autoCapitalize="none"
               />
 
               {/* Effort */}

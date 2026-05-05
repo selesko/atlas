@@ -302,7 +302,7 @@ export const CopilotCard: React.FC<CopilotCardProps> = ({
   const actions = (payload?.actions ?? []).slice(0, 2);
 
   const showDeepAtlas = tab === 'Atlas' && !!systemTrajectory && systemTrajectory.length >= 2;
-  const showDeepNodes = tab === 'Nodes' && !!nodeBubbles && nodeBubbles.length > 0;
+  const showDeepNodes = tab === 'Evaluate' && !!nodeBubbles && nodeBubbles.length > 0;
   const showDeepActions = tab === 'Actions' && !!allCoordinates && allCoordinates.length > 0;
 
   return (

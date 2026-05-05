@@ -317,6 +317,8 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
               placeholder="Action title…"
               placeholderTextColor={theme.textMuted}
               autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={() => {
                 if (addActionTarget && addActionTitle.trim()) {

@@ -91,6 +91,73 @@ function buildCurvePath(pts: Array<{ x: number; y: number }>): string {
   return d;
 }
 
+// ─── Trajectory range helpers ─────────────────────────────────────────────────
+
+export type TrajectoryRange = '1W' | '1M' | '1Y' | 'ALL';
+
+/** Returns data points {date, value} for the selected range.
+ *  1W/1M → daily. 1Y → weekly. ALL → weekly from earliest scoreHistory. */
+function getTrajectoryPoints(nodes: Node[], range: TrajectoryRange): Array<{ date: string; value: number }> {
+  if (nodes.length === 0) return [];
+
+  let days: string[];
+
+  if (range === '1W') {
+    days = getPastDays(7);
+  } else if (range === '1M') {
+    days = getPastDays(30);
+  } else if (range === '1Y') {
+    // 52 weekly anchor points
+    days = Array.from({ length: 52 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (51 - i) * 7);
+      return d.toISOString().split('T')[0];
+    });
+  } else {
+    // ALL: weekly from the earliest recorded scoreHistory date
+    let earliest = new Date();
+    for (const node of nodes) {
+      for (const goal of node.goals) {
+        for (const h of goal.scoreHistory || []) {
+          const d = new Date(h.date);
+          if (d < earliest) earliest = d;
+        }
+      }
+    }
+    const now = new Date();
+    const weeks: string[] = [];
+    const cursor = new Date(earliest);
+    while (cursor <= now) {
+      weeks.push(cursor.toISOString().split('T')[0]);
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    if (weeks.length === 0) weeks.push(now.toISOString().split('T')[0]);
+    days = weeks;
+  }
+
+  return days.map(day => {
+    const nodeScores = nodes.map(node => {
+      if (node.goals.length === 0) return 0;
+      const gs = node.goals.map(g => scoreForDay(g, day));
+      return gs.reduce((a, b) => a + b, 0) / gs.length;
+    });
+    const value = Math.min(10, Math.max(0,
+      nodeScores.reduce((a, b) => a + b, 0) / nodes.length
+    ));
+    return { date: day, value };
+  });
+}
+
+/** Short label for a date given the active range. */
+function formatTrajDate(dateStr: string, range: TrajectoryRange): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  if (range === '1W') return DAYS[d.getDay()];
+  if (range === '1M') return `${d.getDate()}/${d.getMonth() + 1}`;
+  return `${MONTHS[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`;
+}
+
 
 interface CopilotAction {
   label: string;
@@ -152,6 +219,11 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const [cardTab, setCardTab] = useState<'coordinates' | 'actions' | 'details'>('coordinates');
   const [actionNodeDropdownOpen, setActionNodeDropdownOpen] = useState(false);
   const [actionCoordDropdownOpen, setActionCoordDropdownOpen] = useState(false);
+
+  // Trajectory modal
+  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
+  const [trajectoryRange, setTrajectoryRange] = useState<TrajectoryRange>('1W');
+  const trajectoryScrollRef = useRef<ScrollView>(null);
 
   // Reset tab and input when entity changes
   useEffect(() => {
@@ -272,6 +344,31 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const trendUp = systemTrajectory[6] >= systemTrajectory[3];
   const trendDelta = +(systemTrajectory[6] - systemTrajectory[0]).toFixed(1);
   const trendDeltaStr = trendDelta > 0 ? `+${trendDelta}` : `${trendDelta}`;
+
+  // Trajectory modal data
+  const trajectoryPoints = useMemo(
+    () => getTrajectoryPoints(nodes, trajectoryRange),
+    [nodes, trajectoryRange]
+  );
+  const TRAJ_CHART_H = 140;
+  const TRAJ_LABEL_H = 28;
+  const TRAJ_PT_W: Record<TrajectoryRange, number> = { '1W': 46, '1M': 22, '1Y': 18, 'ALL': 18 };
+  const ptW = TRAJ_PT_W[trajectoryRange];
+  const trajChartW = Math.max(trajectoryPoints.length * ptW, width - 48);
+  const trajMin = trajectoryPoints.length ? Math.min(...trajectoryPoints.map(p => p.value)) : 0;
+  const trajMax = trajectoryPoints.length ? Math.max(...trajectoryPoints.map(p => p.value)) : 10;
+  const trajRange = Math.max(trajMax - trajMin, 1);
+  const toY = (v: number) => TRAJ_CHART_H - 16 - ((v - trajMin) / trajRange) * (TRAJ_CHART_H - 28);
+  const trajPts = trajectoryPoints.map((p, i) => ({ x: i * ptW + ptW / 2, y: toY(p.value) }));
+  const trajPath = buildCurvePath(trajPts);
+  const trajDelta = trajectoryPoints.length >= 2
+    ? +(trajectoryPoints[trajectoryPoints.length - 1].value - trajectoryPoints[0].value).toFixed(1)
+    : 0;
+  const trajUp = trajDelta >= 0;
+  const trajColor = trajUp ? '#4ade80' : '#fb7185';
+
+  // Which labels to show (thin out for readability)
+  const labelStride = trajectoryRange === '1W' ? 1 : trajectoryRange === '1M' ? 5 : trajectoryRange === '1Y' ? 4 : 6;
 
   return (
     <>
@@ -529,48 +626,51 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
       </GlassCard>
 
 
-      {/* 7-day trend line */}
-      <GlassCard style={styles.trendCard}>
-        {/* Trend header: label + delta + tag */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5 }}>7-DAY TRAJECTORY</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {trendDelta !== 0 && (
-              <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>
-                {trendDeltaStr}
-              </Text>
-            )}
-            <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: trendUp ? 'rgba(74,222,128,0.1)' : 'rgba(251,113,133,0.1)' }}>
-              <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 9, fontWeight: '700', letterSpacing: 1.5 }}>
-                {trendUp ? '↑ UP' : '↓ DOWN'}
-              </Text>
+      {/* 7-day trend line — tap to expand */}
+      <TouchableOpacity onPress={() => setTrajectoryOpen(true)} activeOpacity={0.85}>
+        <GlassCard style={styles.trendCard}>
+          {/* Trend header: label + delta + tag */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5 }}>7-DAY TRAJECTORY</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {trendDelta !== 0 && (
+                <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>
+                  {trendDeltaStr}
+                </Text>
+              )}
+              <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: trendUp ? 'rgba(74,222,128,0.1)' : 'rgba(251,113,133,0.1)' }}>
+                <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 9, fontWeight: '700', letterSpacing: 1.5 }}>
+                  {trendUp ? '↑ UP' : '↓ DOWN'}
+                </Text>
+              </View>
+              <Text style={{ color: theme.textMuted, fontSize: 9, opacity: 0.5 }}>›</Text>
             </View>
           </View>
-        </View>
-        <Svg width="100%" height={44} viewBox={`0 0 ${SPARKLINE_W * 3} 44`} preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0.2" />
-              <Stop offset="100%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          {sparkPath ? (() => {
-            const scaledPts = systemTrajectory.map((v, i) => ({
-              x: (i / 6) * (SPARKLINE_W * 3),
-              y: 38 - (v / 10) * 32,
-            }));
-            const scaledPath = buildCurvePath(scaledPts);
-            const fillPath = scaledPath + ` L${SPARKLINE_W * 3} 44 L0 44 Z`;
-            return (
-              <>
-                <Path d={fillPath} fill="url(#sparkFill)" />
-                <Path d={scaledPath} stroke={trendUp ? '#4ade80' : '#fb7185'} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                <Circle cx={scaledPts[6].x} cy={scaledPts[6].y} r={3.5} fill={trendUp ? '#4ade80' : '#fb7185'} />
-              </>
-            );
-          })() : null}
-        </Svg>
-      </GlassCard>
+          <Svg width="100%" height={44} viewBox={`0 0 ${SPARKLINE_W * 3} 44`} preserveAspectRatio="none">
+            <Defs>
+              <LinearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0.2" />
+                <Stop offset="100%" stopColor={trendUp ? '#4ade80' : '#fb7185'} stopOpacity="0" />
+              </LinearGradient>
+            </Defs>
+            {sparkPath ? (() => {
+              const scaledPts = systemTrajectory.map((v, i) => ({
+                x: (i / 6) * (SPARKLINE_W * 3),
+                y: 38 - (v / 10) * 32,
+              }));
+              const scaledPath = buildCurvePath(scaledPts);
+              const fillPath = scaledPath + ` L${SPARKLINE_W * 3} 44 L0 44 Z`;
+              return (
+                <>
+                  <Path d={fillPath} fill="url(#sparkFill)" />
+                  <Path d={scaledPath} stroke={trendUp ? '#4ade80' : '#fb7185'} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <Circle cx={scaledPts[6].x} cy={scaledPts[6].y} r={3.5} fill={trendUp ? '#4ade80' : '#fb7185'} />
+                </>
+              );
+            })() : null}
+          </Svg>
+        </GlassCard>
+      </TouchableOpacity>
 
 
       {/* Interactive Detail Modal — rendered outside chart container so it's never clipped */}
@@ -654,8 +754,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       })}
                     </View>
 
-                    {/* Tab content — fixed height so card doesn't resize between tabs */}
-                    <ScrollView style={{ height: 280 }} showsVerticalScrollIndicator={false}>
+                    {/* Tab content — capped height so card stays compact */}
+                    <ScrollView style={{ maxHeight: 210 }} showsVerticalScrollIndicator={false}>
                       {cardTab === 'coordinates' && (
                         <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
                           {node.goals.filter((g: any) => !g.archived).map((g: any) => {
@@ -765,6 +865,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               value={newActionTitle}
                               onChangeText={setNewActionTitle}
                               returnKeyType="done"
+                              autoCorrect={false}
+                              autoCapitalize="none"
                               onSubmitEditing={() => {
                                 if (!newActionTitle.trim() || node.goals.filter((g: any) => !g.archived).length === 0) return;
                                 const firstGoal = node.goals.filter((g: any) => !g.archived)[0];
@@ -823,6 +925,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         }}
                         placeholderTextColor={theme.textMuted}
                         returnKeyType="done"
+                        autoCorrect={false}
+                        autoCapitalize="none"
                       />
                       <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
                         <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
@@ -848,8 +952,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       })}
                     </View>
 
-                    {/* Tab content — fixed height so card doesn't resize between tabs */}
-                    <ScrollView style={{ height: 280 }} showsVerticalScrollIndicator={false}>
+                    {/* Tab content — capped height so card stays compact */}
+                    <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
                       {cardTab === 'details' && (() => {
                         const applySlide = (evt: { nativeEvent: { locationX: number } }) => {
                           const w = coordSliderTrackWidth.current;
@@ -948,6 +1052,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               value={newActionTitle}
                               onChangeText={setNewActionTitle}
                               returnKeyType="done"
+                              autoCorrect={false}
+                              autoCapitalize="none"
                               onSubmitEditing={() => {
                                 if (!newActionTitle.trim()) return;
                                 addAction(coord.nodeId, coord.id, newActionTitle.trim(), 'easy');
@@ -1142,6 +1248,133 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
             </Pressable>
           );
         })()}
+      </Modal>
+
+      {/* Trajectory Stock Chart Modal */}
+      <Modal
+        visible={trajectoryOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTrajectoryOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' }}
+          onPress={() => setTrajectoryOpen(false)}
+        >
+          <Pressable onPress={e => e.stopPropagation()}>
+            <View style={{ backgroundColor: 'rgba(8,14,30,0.99)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.08)', paddingBottom: 32 }}>
+
+              {/* Handle + header */}
+              <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)' }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 6 }}>
+                <View>
+                  <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 4 }}>SYSTEM TRAJECTORY</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+                    <Text style={{ color: 'white', fontSize: 28, fontWeight: '600', letterSpacing: 0.5 }}>
+                      {trajectoryPoints.length ? trajectoryPoints[trajectoryPoints.length - 1].value.toFixed(1) : '—'}
+                    </Text>
+                    {trajDelta !== 0 && (
+                      <Text style={{ color: trajColor, fontSize: 14, fontWeight: '700' }}>
+                        {trajDelta > 0 ? `+${trajDelta}` : `${trajDelta}`}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => setTrajectoryOpen(false)} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Range pills */}
+              <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 24, marginBottom: 16 }}>
+                {(['1W', '1M', '1Y', 'ALL'] as TrajectoryRange[]).map(r => {
+                  const active = trajectoryRange === r;
+                  return (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => {
+                        setTrajectoryRange(r);
+                        // Scroll to end after range changes (slight delay for layout)
+                        setTimeout(() => trajectoryScrollRef.current?.scrollToEnd({ animated: false }), 50);
+                      }}
+                      style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: active ? trajColor + '22' : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: active ? trajColor + '66' : 'rgba(255,255,255,0.08)' }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ color: active ? trajColor : 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>{r}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Scrollable chart */}
+              <ScrollView
+                ref={trajectoryScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 24 }}
+                onLayout={() => trajectoryScrollRef.current?.scrollToEnd({ animated: false })}
+              >
+                <Svg width={trajChartW} height={TRAJ_CHART_H + TRAJ_LABEL_H} viewBox={`0 0 ${trajChartW} ${TRAJ_CHART_H + TRAJ_LABEL_H}`}>
+                  <Defs>
+                    <LinearGradient id="trajFill" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0%" stopColor={trajColor} stopOpacity="0.22" />
+                      <Stop offset="100%" stopColor={trajColor} stopOpacity="0" />
+                    </LinearGradient>
+                  </Defs>
+
+                  {/* Subtle horizontal grid lines at 0, 5, 10 */}
+                  {[0, 5, 10].map(v => {
+                    const gy = toY(v);
+                    if (gy < 0 || gy > TRAJ_CHART_H) return null;
+                    return (
+                      <G key={v}>
+                        <Line x1={0} y1={gy} x2={trajChartW} y2={gy} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+                        <SvgText x={4} y={gy - 4} fontSize={8} fill="rgba(255,255,255,0.2)" fontWeight="600">{v}</SvgText>
+                      </G>
+                    );
+                  })}
+
+                  {/* Filled area + line */}
+                  {trajPath ? (
+                    <>
+                      <Path d={trajPath + ` L${trajPts[trajPts.length - 1].x} ${TRAJ_CHART_H} L${trajPts[0].x} ${TRAJ_CHART_H} Z`} fill="url(#trajFill)" />
+                      <Path d={trajPath} stroke={trajColor} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      {/* Endpoint glow dot */}
+                      {trajPts.length > 0 && (
+                        <>
+                          <Circle cx={trajPts[trajPts.length - 1].x} cy={trajPts[trajPts.length - 1].y} r={7} fill={trajColor} opacity={0.18} />
+                          <Circle cx={trajPts[trajPts.length - 1].x} cy={trajPts[trajPts.length - 1].y} r={3.5} fill={trajColor} />
+                        </>
+                      )}
+                    </>
+                  ) : null}
+
+                  {/* X-axis date labels */}
+                  {trajectoryPoints.map((p, i) => {
+                    if (i % labelStride !== 0 && i !== trajectoryPoints.length - 1) return null;
+                    const lx = trajPts[i]?.x ?? i * ptW + ptW / 2;
+                    return (
+                      <SvgText
+                        key={p.date}
+                        x={lx}
+                        y={TRAJ_CHART_H + 18}
+                        fontSize={8}
+                        fill="rgba(255,255,255,0.28)"
+                        fontWeight="700"
+                        textAnchor="middle"
+                      >
+                        {formatTrajDate(p.date, trajectoryRange)}
+                      </SvgText>
+                    );
+                  })}
+                </Svg>
+              </ScrollView>
+
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Chart Explainer Modal */}

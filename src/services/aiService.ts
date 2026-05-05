@@ -21,10 +21,10 @@ export interface CopilotPayload {
 // ─── Tab → edge-function action mapping ──────────────────────────────────────
 
 const TAB_ACTION: Record<string, string> = {
-  Atlas: 'briefing',
-  Nodes: 'nodeDiagnostic',
-  Actions: 'taskDispatch',
-  Profile: 'briefing',
+  Atlas:    'briefing',
+  Evaluate: 'nodeDiagnostic',
+  Actions:  'taskDispatch',
+  Profile:  'briefing',
 };
 
 // ─── Tab visual config (accent + icon) ───────────────────────────────────────
@@ -35,10 +35,10 @@ export interface TabConfig {
 }
 
 export const TAB_CONFIG: Record<string, TabConfig> = {
-  Atlas:   { accentColor: '#38BDF8', icon: '◎' },
-  Nodes:   { accentColor: '#F59E0B', icon: '◈' },
-  Actions: { accentColor: '#34D399', icon: '◫' },
-  Profile: { accentColor: '#38BDF8', icon: '◎' },
+  Atlas:    { accentColor: '#38BDF8', icon: '◎' },
+  Evaluate: { accentColor: '#F59E0B', icon: '◈' },
+  Actions:  { accentColor: '#34D399', icon: '◫' },
+  Profile:  { accentColor: '#38BDF8', icon: '◎' },
 };
 
 // ─── Fetch copilot card payload ───────────────────────────────────────────────

@@ -133,28 +133,28 @@ export const DEFAULT_NODE_IDS = ['mind', 'body', 'home'];
 
 export const PERSONA_SUBTITLES: Record<string, Record<string, string>> = {
   Engineer: {
-    Atlas:   'SYSTEM OVERVIEW // BALANCE CHECK',
-    Nodes:   'NODE CALIBRATION // ACTIVE',
-    Actions: 'TASK DEPLOYMENT // VELOCITY',
-    Profile: 'OPERATOR CONFIG // LOADED',
+    Atlas:    'SYSTEM OVERVIEW // BALANCE CHECK',
+    Evaluate: 'NODE CALIBRATION // EVALUATE',
+    Actions:  'TASK DEPLOYMENT // VELOCITY',
+    Profile:  'OPERATOR CONFIG // LOADED',
   },
   Seeker: {
-    Atlas:   'YOUR CONSTELLATION AT A GLANCE',
-    Nodes:   'THE PILLARS OF YOUR PATH',
-    Actions: 'ACTIONS THAT MOVE YOU FORWARD',
-    Profile: 'YOUR ARCHETYPE & DIRECTION',
+    Atlas:    'YOUR CONSTELLATION AT A GLANCE',
+    Evaluate: 'TAKE STOCK OF WHERE YOU STAND',
+    Actions:  'ACTIONS THAT MOVE YOU FORWARD',
+    Profile:  'YOUR ARCHETYPE & DIRECTION',
   },
   Spiritual: {
-    Atlas:   'THE SHAPE OF YOUR BECOMING',
-    Nodes:   'THE ROOTS BENEATH THE BRANCHES',
-    Actions: 'SEEDS PLANTED IN INTENTION',
-    Profile: 'THE FACE YOU OFFER THE WORLD',
+    Atlas:    'THE SHAPE OF YOUR BECOMING',
+    Evaluate: 'SEE YOURSELF CLEARLY',
+    Actions:  'SEEDS PLANTED IN INTENTION',
+    Profile:  'THE FACE YOU OFFER THE WORLD',
   },
 };
 
 export const INFO_TEXTS: Record<string, string> = {
   Atlas: 'The Atlas is your primary visualization of the balance between Mind, Body, and Home. This radar chart represents the current state of your system based on the coordinates you have manually set. A symmetrical shape indicates balance, while a pull toward one node highlights where your current focus should be concentrated.',
-  Nodes: 'Nodes & Coordinates\n\nEvery primary Node is supported by specific Coordinates. These are the individual pillars that define the integrity of the node.\n\nCoordinates allow for granular adjustment (e.g., "Meditation" is a coordinate of "Mind").\n\nMoving these sliders manually updates the Node\'s overall average.\n\nUse this screen to adjust your status based on the Evidence you\'ve gathered in your daily logs.',
+  Evaluate: 'Evaluate is where you take stock.\n\nEvery Node is supported by Coordinates — specific, measurable pillars that define its integrity.\n\nUse the sliders to score each Coordinate honestly. This is your check-in: where are you actually at, right now?\n\nOnce you\'ve evaluated, move to Actions — that\'s where you decide what to do about it.',
   Actions: 'Actions are the bottom tier of your system — they support Coordinates, which support Nodes.\n\nEvery Action you log is intentional: it is something you did (or plan to do) to move a Coordinate forward.\n\nFocus Mode: High-priority actions that represent your current path.\n\nSorting: Priority items stay at the top; completed entries move to the bottom for reference.',
   Profile: 'The Profile page defines your current Archetype.\n\nSelecting an Archetype (Architect, Nomad, or Guardian) updates the interface overlay and the specific "Directives" shown throughout the app.\n\nThis allows you to match the system\'s feedback to your current environment or phase of life.',
 };

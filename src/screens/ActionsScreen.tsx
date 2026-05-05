@@ -59,11 +59,11 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
 
   const isFocusActive = activeFilters.has('FOCUS');
   const activeNodeIds = [...activeFilters].filter(f => f !== 'FOCUS');
-  const nodesToConsider = activeNodeIds.length > 0 ? nodes.filter(n => activeNodeIds.includes(n.id)) : nodes;
+  const nodesToConsider = (activeNodeIds.length > 0 ? nodes.filter(n => activeNodeIds.includes(n.id)) : nodes).filter(n => !n.archived);
 
   const nodeGroups = nodesToConsider.map(n => ({
     node: n,
-    coords: n.goals.map(g => ({
+    coords: n.goals.filter(g => !g.archived).map(g => ({
       goalId: g.id,
       coordinateName: g.name,
       actions: (isFocusActive ? g.actions.filter(a => a.isPriority) : g.actions).filter(a => !a.archived),
@@ -118,7 +118,13 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
 
       {nodeGroups.length === 0 ? (
         <View style={styles.actionEmptyState}>
-          <Text style={[styles.actionEmptyStateText, { color: theme.textMuted }]}>NO ACTIVE COORDINATE</Text>
+          <Text style={[styles.actionEmptyStateText, { color: theme.textMuted }]}>
+            {isFocusActive
+              ? 'NO PRIORITY ACTIONS'
+              : activeNodeIds.length > 0
+              ? 'NO ACTIONS YET FOR THIS NODE'
+              : 'NO ACTIVE ACTIONS'}
+          </Text>
         </View>
       ) : (
         nodeGroups.map(({ node, coords }) => {

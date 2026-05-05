@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
-  PanResponder, Animated, Pressable, StyleSheet as RNStyleSheet, Easing
+  PanResponder, Animated, Pressable, StyleSheet as RNStyleSheet, Easing, Modal,
+  TextInput, ScrollView,
 } from 'react-native';
 import Svg, {
   Circle, Polygon, G, Rect, Path, Defs,
@@ -135,7 +136,8 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   onGoToNode,
   onGoToActions,
 }) => {
-  const { nodes, getNodeAvg, themeMode, persona } = useAppStore();
+  const { nodes: allNodes, getNodeAvg, themeMode, persona, updateGoal, updateValue, toggleAction, addAction, updateActionEffort, saveActionEdit } = useAppStore();
+  const nodes = allNodes.filter(n => !n.archived);
   const theme = useTheme();
 
   const [atlasGraphView, setAtlasGraphView] = useState<AtlasGraphView>('nodes');
@@ -146,6 +148,22 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const [radarPulseScale, setRadarPulseScale] = useState(1);
   const [nodeBreathValue, setNodeBreathValue] = useState(0);
 
+  const [newActionTitle, setNewActionTitle] = useState('');
+  const [cardTab, setCardTab] = useState<'coordinates' | 'actions' | 'details'>('coordinates');
+  const [actionNodeDropdownOpen, setActionNodeDropdownOpen] = useState(false);
+  const [actionCoordDropdownOpen, setActionCoordDropdownOpen] = useState(false);
+
+  // Reset tab and input when entity changes
+  useEffect(() => {
+    setNewActionTitle('');
+    setActionNodeDropdownOpen(false);
+    setActionCoordDropdownOpen(false);
+    if (selectedEntity?.type === 'coordinate') setCardTab('details');
+    else setCardTab('coordinates');
+  }, [selectedEntity?.type, selectedEntity?.data?.id]);
+
+  const coordSliderTrackWidth = useRef<number>(0);
+  const nodeCardTrackWidths = useRef<Record<string, number>>({});
   const radarRotation = useRef(new Animated.Value(0)).current;
   const radarScale = useRef(new Animated.Value(1)).current;
   const nodeBreathAnim = useRef(new Animated.Value(0)).current;
@@ -257,28 +275,77 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
   return (
     <>
-      {/* System Status */}
-      <GlassCard style={styles.systemManifestCard}>
-        {/* Top row: label + score + delta + trend tag */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.systemManifestBracketLabel, { color: theme.textMuted }]}>{getSystemStatusLabel()}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-              <Text style={[styles.systemManifestBracketValue, { color: theme.text }]}>{systemBalance}</Text>
-              {trendDelta !== 0 && (
-                <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 }}>
-                  {trendDeltaStr}
-                </Text>
-              )}
+      {/* System Status — borderless, floating */}
+      {(() => {
+        const score = parseFloat(systemBalance);
+        const fullDashes = Math.floor(score);
+        const fraction = score - fullDashes; // 0.0–0.99, for the partial dash
+        const glowColor = theme.accent;
+        return (
+          <View style={{ paddingHorizontal: 4, paddingTop: 8, paddingBottom: 20, marginBottom: 4 }}>
+            <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 3, marginBottom: 14 }}>
+              {getSystemStatusLabel()}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              {/* Glowing score circle */}
+              <View style={{
+                width: 68, height: 68, borderRadius: 34,
+                borderWidth: 1.5, borderColor: glowColor + '60',
+                alignItems: 'center', justifyContent: 'center',
+                shadowColor: glowColor, shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+                backgroundColor: glowColor + '08',
+              }}>
+                <Text style={{ color: theme.text, fontSize: 24, fontWeight: '600', letterSpacing: 0.5 }}>{systemBalance}</Text>
+              </View>
+              {/* 10 glowing dashes — full, partial, and empty */}
+              <View style={{ flex: 1, flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                {Array.from({ length: 10 }, (_, i) => {
+                  const isFull = i < fullDashes;
+                  const isPartial = i === fullDashes && fraction > 0.05;
+                  // Partial dash: render an empty track with a lit fill overlay
+                  if (isPartial) {
+                    return (
+                      <View
+                        key={i}
+                        style={{
+                          flex: 1, height: 7, borderRadius: 4,
+                          backgroundColor: 'rgba(255,255,255,0.07)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <View style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: `${Math.round(fraction * 100)}%`,
+                          borderRadius: 4,
+                          backgroundColor: glowColor,
+                          shadowColor: glowColor,
+                          shadowOpacity: 0.8,
+                          shadowRadius: 6,
+                          shadowOffset: { width: 0, height: 0 },
+                          opacity: 0.75,
+                        }} />
+                      </View>
+                    );
+                  }
+                  return (
+                    <View
+                      key={i}
+                      style={{
+                        flex: 1, height: 7, borderRadius: 4,
+                        backgroundColor: isFull ? glowColor : 'rgba(255,255,255,0.07)',
+                        shadowColor: isFull ? glowColor : 'transparent',
+                        shadowOpacity: isFull ? 0.9 : 0,
+                        shadowRadius: isFull ? 8 : 0,
+                        shadowOffset: { width: 0, height: 0 },
+                      }}
+                    />
+                  );
+                })}
+              </View>
             </View>
           </View>
-          <View style={{ paddingBottom: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: trendUp ? 'rgba(74,222,128,0.1)' : 'rgba(251,113,133,0.1)' }}>
-            <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>
-              7-DAY {trendUp ? '↑' : '↓'}
-            </Text>
-          </View>
-        </View>
-      </GlassCard>
+        );
+      })()}
 
       {/* Atlas Card */}
       <GlassCard style={styles.atlasCard}>
@@ -437,170 +504,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
               )}
             </Animated.View>
 
-            {/* Interactive Detail Modal for Cosmic View */}
-            {selectedEntity && (() => {
-              const activeNodeForColor = nodes.find(n => n.id === (atlasHighlightId || nodes[0]?.id));
-              const entityColor = selectedEntity.type === 'node' ? selectedEntity.data.color : activeNodeForColor?.color || THEME.accent;
-
-              // Node tap — expanded card with orbital graphic, coordinate bars, two nav buttons
-              if (selectedEntity.type === 'node') {
-                const node = selectedEntity.data;
-
-                // Build action lists for the orbital graphic
-                const allNodeActions = node.goals.flatMap((g: any) =>
-                  g.actions.filter((a: any) => !a.archived)
-                );
-                const easyActs   = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'easy');
-                const mediumActs = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'medium');
-                const heavyActs  = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'heavy');
-
-                const PW = 280; const PH = 150;
-                const PCX = PW / 2; const PCY = PH / 2;
-
-                const renderOrbitalSats = (acts: any[], effort: ActionEffort) =>
-                  acts.map((action: any, ai: number) => {
-                    const angle =
-                      (ai / Math.max(acts.length, 1)) * Math.PI * 2 +
-                      EFFORT_ANGLE_OFFSET[effort] + 0.3;
-                    const r = POPUP_EFFORT_ORBIT[effort];
-                    const ax = PCX + r * Math.cos(angle);
-                    const ay = PCY + r * Math.sin(angle);
-                    const dotR = POPUP_EFFORT_DOT_R[effort];
-                    return (
-                      <G key={action.id}>
-                        {effort === 'heavy' && (
-                          <Circle cx={ax} cy={ay} r={dotR * 2.4} fill="url(#ph)" />
-                        )}
-                        <Circle cx={ax} cy={ay} r={dotR} fill={node.color} opacity={POPUP_EFFORT_DOT_OP[effort]} />
-                      </G>
-                    );
-                  });
-
-                return (
-                  <Pressable
-                    style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'center', alignItems: 'center', padding: 16 }]}
-                    onPress={() => setSelectedEntity(null)}
-                  >
-                    <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
-                      <View style={{ backgroundColor: 'rgba(10,18,36,0.97)', borderRadius: 24, borderWidth: 1, borderColor: node.color + '55', overflow: 'hidden' }}>
-
-                        {/* Header */}
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: node.color }} />
-                            <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', letterSpacing: 1.5 }}>{node.name.toUpperCase()}</Text>
-                          </View>
-                          <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-                            <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Orbital action graphic */}
-                        <View style={{ borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: node.color + '25' }}>
-                          <Svg width="100%" height={PH} viewBox={`0 0 ${PW} ${PH}`} preserveAspectRatio="xMidYMid meet">
-                            <Defs>
-                              <RadialGradient id="ph" cx="50%" cy="50%" r="50%">
-                                <Stop offset="0%" stopColor={node.color} stopOpacity="0.28" />
-                                <Stop offset="100%" stopColor={node.color} stopOpacity="0" />
-                              </RadialGradient>
-                            </Defs>
-                            {/* Faint orbit rings */}
-                            {easyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.easy}   stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.14} />}
-                            {mediumActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.medium} stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.10} />}
-                            {heavyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.heavy}  stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.07} />}
-                            {/* Central node star */}
-                            <Circle cx={PCX} cy={PCY} r={16} fill={node.color} opacity={0.10} />
-                            <Circle cx={PCX} cy={PCY} r={5.5} fill={node.color} opacity={0.95} />
-                            {/* Satellites */}
-                            {renderOrbitalSats(easyActs,   'easy')}
-                            {renderOrbitalSats(mediumActs, 'medium')}
-                            {renderOrbitalSats(heavyActs,  'heavy')}
-                            {allNodeActions.length === 0 && (
-                              <SvgText x={PCX} y={PCY + 4} fontSize={10} fill="rgba(255,255,255,0.18)" textAnchor="middle">NO ACTIONS YET</SvgText>
-                            )}
-                          </Svg>
-                        </View>
-
-                        {/* Coordinate score bars */}
-                        <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>
-                          {node.goals.map((g: any) => (
-                            <View key={g.id} style={{ marginBottom: 12 }}>
-                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
-                                <Text style={{ color: theme.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1.2 }}>{g.name.toUpperCase()}</Text>
-                                <Text style={{ color: theme.text, fontSize: 10, fontWeight: '700' }}>{g.value.toFixed(1)}</Text>
-                              </View>
-                              <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2 }}>
-                                <View style={{ height: 3, width: `${(g.value / 10) * 100}%`, backgroundColor: node.color, borderRadius: 2, opacity: 0.75 }} />
-                              </View>
-                            </View>
-                          ))}
-                        </View>
-
-                        {/* Nav buttons */}
-                        <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 18, paddingTop: 4 }}>
-                          <TouchableOpacity
-                            style={{ flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: node.color + '44', alignItems: 'center' }}
-                            onPress={() => { setSelectedEntity(null); onGoToNode?.(node.id); }}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>NODE</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={{ flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: node.color + '18', borderWidth: 1, borderColor: node.color + '66', alignItems: 'center' }}
-                            onPress={() => { setSelectedEntity(null); onGoToActions?.(node.id); }}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>ACTIONS</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </Pressable>
-                  </Pressable>
-                );
-              }
-
-              // Coordinate / action taps — existing compact card
-              return (
-              <Pressable
-                style={[RNStyleSheet.absoluteFill, { zIndex: 10, justifyContent: 'center', alignItems: 'center', padding: 24 }]}
-                onPress={() => setSelectedEntity(null)}
-              >
-                <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%' }}>
-                  <GlassCard style={{ padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.65)', borderColor: entityColor, borderWidth: 1, borderRadius: 24, shadowColor: entityColor, shadowOpacity: 0.25, shadowRadius: 15 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }}>
-                        {selectedEntity.type === 'coordinate' ? selectedEntity.data.name.toUpperCase() : selectedEntity.data.title?.toUpperCase() || selectedEntity.data.label?.toUpperCase()}
-                      </Text>
-                      <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{top:15,bottom:15,left:15,right:15}}>
-                        <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>CLOSE</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={{ color: theme.textMuted, fontSize: 13, letterSpacing: 1, fontWeight: '600' }}>
-                      {selectedEntity.type === 'coordinate'
-                        ? `SCORE: ${selectedEntity.data.value.toFixed(1)}   •   ACTIONS: ${selectedEntity.data.actions.length}`
-                        : `STATUS: ${selectedEntity.data.completed ? 'COMPLETED' : 'PENDING'}`}
-                    </Text>
-                    <TouchableOpacity
-                      style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: `${entityColor}1A`, borderWidth: 1, borderColor: `${entityColor}66`, borderRadius: 12, alignSelf: 'flex-start' }}
-                      onPress={() => {
-                        const activeNodeId = atlasHighlightId || nodes[0]?.id;
-                        if (!activeNodeId) return;
-                        if (selectedEntity.type === 'coordinate') {
-                          onOpenCoordinate?.(activeNodeId, selectedEntity.data.id);
-                        } else {
-                          onOpenAction?.(activeNodeId, selectedEntity.data.__goalId, selectedEntity.data.id);
-                        }
-                        setSelectedEntity(null);
-                      }}
-                    >
-                      <Text style={{ color: entityColor, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
-                        {`VIEW ${selectedEntity.type === 'coordinate' ? 'COORDINATE' : 'ACTION'} →`}
-                      </Text>
-                    </TouchableOpacity>
-                  </GlassCard>
-                </Pressable>
-              </Pressable>
-            );})()}
           </View>
 
           <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }}>
@@ -628,6 +531,22 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
       {/* 7-day trend line */}
       <GlassCard style={styles.trendCard}>
+        {/* Trend header: label + delta + tag */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5 }}>7-DAY TRAJECTORY</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {trendDelta !== 0 && (
+              <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>
+                {trendDeltaStr}
+              </Text>
+            )}
+            <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: trendUp ? 'rgba(74,222,128,0.1)' : 'rgba(251,113,133,0.1)' }}>
+              <Text style={{ color: trendUp ? '#4ade80' : '#fb7185', fontSize: 9, fontWeight: '700', letterSpacing: 1.5 }}>
+                {trendUp ? '↑ UP' : '↓ DOWN'}
+              </Text>
+            </View>
+          </View>
+        </View>
         <Svg width="100%" height={44} viewBox={`0 0 ${SPARKLINE_W * 3} 44`} preserveAspectRatio="none">
           <Defs>
             <LinearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
@@ -653,25 +572,582 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         </Svg>
       </GlassCard>
 
-      {/* Atlas Guidance */}
-      {guidanceActions.length > 0 && (
-        <GlassCard style={[styles.summaryCard, { marginBottom: 20 }]}>
-          <Text style={[styles.summaryHeading, { color: theme.textMuted }]}>ATLAS GUIDANCE</Text>
-          {guidanceActions.slice(0, 2).map((act, idx) => (
-            <View key={idx} style={[styles.summarySuggestionSection, { borderColor: theme.glassBorder }, idx === guidanceActions.length - 1 && { marginBottom: 0 }]}>
-              <Text style={[styles.summarySuggestionLabel, { color: theme.text }]}>{act.label}</Text>
-              <TouchableOpacity style={styles.summarySuggestionBtn} onPress={() => onAction(act)} activeOpacity={0.8}>
-                <Text style={[styles.summarySuggestionBtnText, { color: theme.accent }]}>{ACTION_BTN_LABELS[act.action] || 'GO'}</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </GlassCard>
-      )}
+
+      {/* Interactive Detail Modal — rendered outside chart container so it's never clipped */}
+      <Modal visible={!!selectedEntity} transparent animationType="fade" onRequestClose={() => { setSelectedEntity(null); setNewActionTitle(''); }}>
+        {selectedEntity && (() => {
+          const activeNodeForColor = nodes.find(n => n.id === (atlasHighlightId || nodes[0]?.id));
+          const entityColor = selectedEntity.type === 'node' ? selectedEntity.data.color : activeNodeForColor?.color || THEME.accent;
+
+          if (selectedEntity.type === 'node') {
+            const node = selectedEntity.data;
+            const allNodeActions = node.goals.flatMap((g: any) => g.actions.filter((a: any) => !a.archived));
+            const easyActs   = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'easy');
+            const mediumActs = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'medium');
+            const heavyActs  = allNodeActions.filter((a: any) => (a.effort ?? 'easy') === 'heavy');
+            const PW = 280; const PH = 150;
+            const PCX = PW / 2; const PCY = PH / 2;
+            const renderOrbitalSats = (acts: any[], effort: ActionEffort) =>
+              acts.map((action: any, ai: number) => {
+                const angle = (ai / Math.max(acts.length, 1)) * Math.PI * 2 + EFFORT_ANGLE_OFFSET[effort] + 0.3;
+                const r = POPUP_EFFORT_ORBIT[effort];
+                const ax = PCX + r * Math.cos(angle);
+                const ay = PCY + r * Math.sin(angle);
+                const dotR = POPUP_EFFORT_DOT_R[effort];
+                return (
+                  <G key={action.id}>
+                    {effort === 'heavy' && <Circle cx={ax} cy={ay} r={dotR * 2.4} fill="url(#ph)" />}
+                    <Circle cx={ax} cy={ay} r={dotR} fill={node.color} opacity={POPUP_EFFORT_DOT_OP[effort]} />
+                  </G>
+                );
+              });
+            return (
+              <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 16 }} onPress={() => setSelectedEntity(null)}>
+                <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420 }}>
+                  <View style={{ backgroundColor: 'rgba(10,18,36,0.97)', borderRadius: 24, borderWidth: 1, borderColor: node.color + '55', overflow: 'hidden' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: node.color }} />
+                        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', letterSpacing: 1.5 }}>{node.name.toUpperCase()}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                        <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: node.color + '25' }}>
+                      <Svg width="100%" height={PH} viewBox={`0 0 ${PW} ${PH}`} preserveAspectRatio="xMidYMid meet">
+                        <Defs>
+                          <RadialGradient id="ph" cx="50%" cy="50%" r="50%">
+                            <Stop offset="0%" stopColor={node.color} stopOpacity="0.28" />
+                            <Stop offset="100%" stopColor={node.color} stopOpacity="0" />
+                          </RadialGradient>
+                        </Defs>
+                        {easyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.easy}   stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.14} />}
+                        {mediumActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.medium} stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.10} />}
+                        {heavyActs.length > 0 && <Circle cx={PCX} cy={PCY} r={POPUP_EFFORT_ORBIT.heavy}  stroke={node.color} strokeWidth={0.5} fill="none" opacity={0.07} />}
+                        <Circle cx={PCX} cy={PCY} r={16} fill={node.color} opacity={0.10} />
+                        <Circle cx={PCX} cy={PCY} r={5.5} fill={node.color} opacity={0.95} />
+                        {renderOrbitalSats(easyActs, 'easy')}
+                        {renderOrbitalSats(mediumActs, 'medium')}
+                        {renderOrbitalSats(heavyActs, 'heavy')}
+                        {allNodeActions.length === 0 && (
+                          <SvgText x={PCX} y={PCY + 4} fontSize={10} fill="rgba(255,255,255,0.18)" textAnchor="middle">NO ACTIONS YET</SvgText>
+                        )}
+                      </Svg>
+                    </View>
+                    {/* Tab bar */}
+                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 2, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                      {(['coordinates', 'actions'] as const).map(tab => {
+                        const active = cardTab === tab;
+                        const openCount = allNodeActions.filter((a: any) => !a.completed).length;
+                        const label = tab === 'coordinates' ? 'COORDINATES' : `ACTIONS${openCount > 0 ? ` · ${openCount}` : ''}`;
+                        return (
+                          <TouchableOpacity
+                            key={tab}
+                            style={{ flex: 1, paddingVertical: 9, alignItems: 'center', backgroundColor: active ? node.color + '22' : 'transparent', borderBottomWidth: 2, borderBottomColor: active ? node.color : 'transparent' }}
+                            onPress={() => setCardTab(tab)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ color: active ? node.color : theme.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>{label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* Tab content — fixed height so card doesn't resize between tabs */}
+                    <ScrollView style={{ height: 280 }} showsVerticalScrollIndicator={false}>
+                      {cardTab === 'coordinates' && (
+                        <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
+                          {node.goals.filter((g: any) => !g.archived).map((g: any) => {
+                            const trackKey = `${node.id}-${g.id}`;
+                            const applySlide = (evt: { nativeEvent: { locationX: number } }) => {
+                              const w = nodeCardTrackWidths.current[trackKey];
+                              if (!w || w <= 0) return;
+                              const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+                              const val = Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1));
+                              updateValue(node.id, g.id, val);
+                              Haptics.selectionAsync();
+                            };
+                            const pan = PanResponder.create({
+                              onStartShouldSetPanResponder: () => true,
+                              onPanResponderGrant: applySlide,
+                              onPanResponderMove: applySlide,
+                            });
+                            const liveGoal = nodes.find(n => n.id === node.id)?.goals.find((lg: any) => lg.id === g.id);
+                            const val = liveGoal?.value ?? g.value;
+                            return (
+                              <View key={g.id} style={{ marginBottom: 18 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <Text style={{ color: theme.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1.2 }}>{g.name.toUpperCase()}</Text>
+                                  <Text style={{ color: node.color, fontSize: 10, fontWeight: '700' }}>{val.toFixed(1)}</Text>
+                                </View>
+                                <View
+                                  style={{ height: 28, justifyContent: 'center' }}
+                                  onLayout={e => { nodeCardTrackWidths.current[trackKey] = e.nativeEvent.layout.width; }}
+                                  {...pan.panHandlers}
+                                >
+                                  <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2 }} />
+                                  <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 12, height: 3, width: `${(val / 10) * 100}%`, backgroundColor: node.color, borderRadius: 2, opacity: 0.8 }} />
+                                  <View pointerEvents="none" style={{ position: 'absolute', left: `${(val / 10) * 100}%`, top: 7, marginLeft: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: node.color, borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)', shadowColor: node.color, shadowOpacity: 0.8, shadowRadius: 6 }} />
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {cardTab === 'actions' && (
+                        <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 }}>
+                          {allNodeActions.length === 0 ? (
+                            <Text style={{ color: theme.textMuted, fontSize: 12, fontStyle: 'italic', opacity: 0.6, marginBottom: 12 }}>No actions yet — add one below</Text>
+                          ) : allNodeActions.map((a: any) => {
+                            const parentGoal = node.goals.find((g: any) => g.actions.some((x: any) => x.id === a.id));
+                            const efforts: ActionEffort[] = ['easy', 'medium', 'heavy'];
+                            return (
+                              <View key={a.id} style={{ paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                <TouchableOpacity
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                                  onPress={() => {
+                                    if (!parentGoal) return;
+                                    toggleAction(node.id, parentGoal.id, a.id);
+                                    const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
+                                    if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Svg width={18} height={18} viewBox="0 0 24 24">
+                                    {a.completed ? (
+                                      <><Circle cx="12" cy="12" r="10" fill={node.color} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
+                                    ) : (
+                                      <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                                    )}
+                                  </Svg>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ color: a.completed ? theme.textMuted : theme.text, fontSize: 13, fontWeight: '500', textDecorationLine: a.completed ? 'line-through' : 'none', opacity: a.completed ? 0.5 : 1 }}>
+                                      {a.title}
+                                    </Text>
+                                    {parentGoal && (
+                                      <Text style={{ color: node.color, fontSize: 10, fontWeight: '600', opacity: 0.6, marginTop: 2 }}>{parentGoal.name}</Text>
+                                    )}
+                                  </View>
+                                  {a.isPriority && <Text style={{ color: node.color, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>★</Text>}
+                                </TouchableOpacity>
+                                {/* Effort toggle */}
+                                <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, marginLeft: 28 }}>
+                                  {efforts.map(e => {
+                                    const sel = (a.effort ?? 'easy') === e;
+                                    return (
+                                      <TouchableOpacity
+                                        key={e}
+                                        onPress={() => {
+                                          if (!parentGoal) return;
+                                          updateActionEffort(node.id, parentGoal.id, a.id, e);
+                                          const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
+                                          if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
+                                        }}
+                                        style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: sel ? node.color + '28' : 'transparent', borderWidth: 1, borderColor: sel ? node.color + '66' : 'rgba(255,255,255,0.1)' }}
+                                        activeOpacity={0.7}
+                                      >
+                                        <Text style={{ color: sel ? node.color : theme.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>{e.toUpperCase()}</Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                            );
+                          })}
+                          {/* Inline add action */}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, marginBottom: 8 }}>
+                            <TextInput
+                              style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '500', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, borderWidth: 1, borderColor: node.color + '33' }}
+                              placeholder="New action…"
+                              placeholderTextColor={theme.textMuted}
+                              value={newActionTitle}
+                              onChangeText={setNewActionTitle}
+                              returnKeyType="done"
+                              onSubmitEditing={() => {
+                                if (!newActionTitle.trim() || node.goals.filter((g: any) => !g.archived).length === 0) return;
+                                const firstGoal = node.goals.filter((g: any) => !g.archived)[0];
+                                addAction(node.id, firstGoal.id, newActionTitle.trim(), 'easy');
+                                const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
+                                if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
+                                setNewActionTitle('');
+                              }}
+                            />
+                            <TouchableOpacity
+                              style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: node.color + '22', borderWidth: 1, borderColor: node.color + '55' }}
+                              onPress={() => {
+                                if (!newActionTitle.trim() || node.goals.filter((g: any) => !g.archived).length === 0) return;
+                                const firstGoal = node.goals.filter((g: any) => !g.archived)[0];
+                                addAction(node.id, firstGoal.id, newActionTitle.trim(), 'easy');
+                                const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
+                                if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
+                                setNewActionTitle('');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ADD</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </ScrollView>
+                  </View>
+                </Pressable>
+              </Pressable>
+            );
+          }
+
+          // ── Coordinate card ──────────────────────────────────────────────────
+          if (selectedEntity.type === 'coordinate') {
+            const coord = selectedEntity.data;
+            const activeActions = (coord.actions as any[]).filter((a: any) => !a.archived);
+            const pendingActions = activeActions.filter((a: any) => !a.completed);
+            const completedActions = activeActions.filter((a: any) => a.completed);
+            const sortedActions = [...pendingActions, ...completedActions];
+
+            return (
+              <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 }} onPress={() => { setSelectedEntity(null); setNewActionTitle(''); }}>
+                <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420 }}>
+                  <View style={{ backgroundColor: 'rgba(10,18,36,0.97)', borderRadius: 24, borderWidth: 1, borderColor: entityColor + '55', overflow: 'hidden' }}>
+
+                    {/* Header: editable name + close */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12, gap: 10 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: entityColor, flexShrink: 0 }} />
+                      <TextInput
+                        style={{ flex: 1, color: theme.text, fontSize: 15, fontWeight: '800', letterSpacing: 1.2 }}
+                        value={coord.name}
+                        onChangeText={(text) => {
+                          updateGoal(coord.nodeId, coord.id, { name: text });
+                          setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, name: text } } : null);
+                        }}
+                        placeholderTextColor={theme.textMuted}
+                        returnKeyType="done"
+                      />
+                      <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                        <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Tab bar */}
+                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 2, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                      {(['details', 'actions'] as const).map(tab => {
+                        const active = cardTab === tab;
+                        const openCount = pendingActions.length;
+                        const label = tab === 'details' ? 'EVALUATE' : `ACTIONS${openCount > 0 ? ` · ${openCount}` : ''}`;
+                        return (
+                          <TouchableOpacity
+                            key={tab}
+                            style={{ flex: 1, paddingVertical: 9, alignItems: 'center', backgroundColor: active ? entityColor + '22' : 'transparent', borderBottomWidth: 2, borderBottomColor: active ? entityColor : 'transparent' }}
+                            onPress={() => setCardTab(tab)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ color: active ? entityColor : theme.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>{label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* Tab content — fixed height so card doesn't resize between tabs */}
+                    <ScrollView style={{ height: 280 }} showsVerticalScrollIndicator={false}>
+                      {cardTab === 'details' && (() => {
+                        const applySlide = (evt: { nativeEvent: { locationX: number } }) => {
+                          const w = coordSliderTrackWidth.current;
+                          if (w <= 0) return;
+                          const x = Math.max(0, Math.min(evt.nativeEvent.locationX, w));
+                          const val = Math.max(1, Math.min(10, Math.round((x / w) * 9) + 1));
+                          updateValue(coord.nodeId, coord.id, val);
+                          setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, value: val } } : null);
+                          Haptics.selectionAsync();
+                        };
+                        const pan = PanResponder.create({
+                          onStartShouldSetPanResponder: () => true,
+                          onPanResponderGrant: applySlide,
+                          onPanResponderMove: applySlide,
+                        });
+                        return (
+                          <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                              <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5 }}>INTEGRITY SCORE</Text>
+                              <Text style={{ color: entityColor, fontSize: 22, fontWeight: '700' }}>{coord.value.toFixed(1)}</Text>
+                            </View>
+                            <View
+                              style={{ height: 28, justifyContent: 'center' }}
+                              onLayout={e => { coordSliderTrackWidth.current = e.nativeEvent.layout.width; }}
+                              {...pan.panHandlers}
+                            >
+                              <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 2 }} />
+                              <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 12, height: 3, width: `${(coord.value / 10) * 100}%`, backgroundColor: entityColor, borderRadius: 2, opacity: 0.85 }} />
+                              <View pointerEvents="none" style={{ position: 'absolute', left: `${(coord.value / 10) * 100}%`, top: 7, marginLeft: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: entityColor, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', shadowColor: entityColor, shadowOpacity: 0.8, shadowRadius: 6 }} />
+                            </View>
+                            {coord.description ? (
+                              <Text style={{ color: theme.textMuted, fontSize: 13, fontWeight: '500', lineHeight: 19, marginTop: 20, fontStyle: 'italic' }}>{coord.description}</Text>
+                            ) : null}
+                          </View>
+                        );
+                      })()}
+
+                      {cardTab === 'actions' && (
+                        <View style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 }}>
+                          {sortedActions.length === 0 ? (
+                            <Text style={{ color: theme.textMuted, fontSize: 12, fontStyle: 'italic', marginBottom: 12, opacity: 0.6 }}>No actions yet — add one below</Text>
+                          ) : sortedActions.map((a: any) => {
+                            const efforts: ActionEffort[] = ['easy', 'medium', 'heavy'];
+                            return (
+                              <View key={a.id} style={{ paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                                <TouchableOpacity
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                                  onPress={() => {
+                                    toggleAction(coord.nodeId, coord.id, a.id);
+                                    const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
+                                    if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Svg width={18} height={18} viewBox="0 0 24 24">
+                                    {a.completed ? (
+                                      <><Circle cx="12" cy="12" r="10" fill={entityColor} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
+                                    ) : (
+                                      <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                                    )}
+                                  </Svg>
+                                  <Text style={{ flex: 1, color: a.completed ? theme.textMuted : theme.text, fontSize: 13, fontWeight: '500', textDecorationLine: a.completed ? 'line-through' : 'none', opacity: a.completed ? 0.5 : 1 }}>
+                                    {a.title}
+                                  </Text>
+                                  {a.isPriority && <Text style={{ color: entityColor, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>★</Text>}
+                                </TouchableOpacity>
+                                {/* Effort toggle */}
+                                <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, marginLeft: 28 }}>
+                                  {efforts.map(e => {
+                                    const sel = (a.effort ?? 'easy') === e;
+                                    return (
+                                      <TouchableOpacity
+                                        key={e}
+                                        onPress={() => {
+                                          updateActionEffort(coord.nodeId, coord.id, a.id, e);
+                                          const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
+                                          if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
+                                        }}
+                                        style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: sel ? entityColor + '28' : 'transparent', borderWidth: 1, borderColor: sel ? entityColor + '66' : 'rgba(255,255,255,0.1)' }}
+                                        activeOpacity={0.7}
+                                      >
+                                        <Text style={{ color: sel ? entityColor : theme.textMuted, fontSize: 9, fontWeight: '700', letterSpacing: 1 }}>{e.toUpperCase()}</Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                            );
+                          })}
+                          {/* Inline add */}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, marginBottom: 8 }}>
+                            <TextInput
+                              style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '500', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, borderWidth: 1, borderColor: entityColor + '33' }}
+                              placeholder="New action…"
+                              placeholderTextColor={theme.textMuted}
+                              value={newActionTitle}
+                              onChangeText={setNewActionTitle}
+                              returnKeyType="done"
+                              onSubmitEditing={() => {
+                                if (!newActionTitle.trim()) return;
+                                addAction(coord.nodeId, coord.id, newActionTitle.trim(), 'easy');
+                                const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
+                                if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
+                                setNewActionTitle('');
+                              }}
+                            />
+                            <TouchableOpacity
+                              style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: entityColor + '22', borderWidth: 1, borderColor: entityColor + '55' }}
+                              onPress={() => {
+                                if (!newActionTitle.trim()) return;
+                                addAction(coord.nodeId, coord.id, newActionTitle.trim(), 'easy');
+                                const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
+                                if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
+                                setNewActionTitle('');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={{ color: entityColor, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ADD</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </ScrollView>
+
+                  </View>
+                </Pressable>
+              </Pressable>
+            );
+          }
+
+          // ── Action card ───────────────────────────────────────────────────────
+          const action = selectedEntity.data;
+          const isCompleted = action.completed;
+          // Local node/coord for the action card dropdowns — derive from action.nodeId / __goalId
+          const actionSelNode = nodes.find(n => n.id === action.nodeId);
+          const actionSelCoord = actionSelNode?.goals.find((g: any) => g.id === action.__goalId);
+          const actionCoords = actionSelNode?.goals.filter((g: any) => !g.archived) || [];
+          const efforts: ActionEffort[] = ['easy', 'medium', 'heavy'];
+          const currentEffort: ActionEffort = action.effort ?? 'easy';
+          return (
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 }} onPress={() => { setSelectedEntity(null); }}>
+              <Pressable onPress={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420 }}>
+                <View style={{ backgroundColor: 'rgba(10,18,36,0.97)', borderRadius: 24, borderWidth: 1, borderColor: entityColor + '55', overflow: 'hidden' }}>
+
+                  {/* Header */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14 }}>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', letterSpacing: 0.5, lineHeight: 22 }}>{action.title}</Text>
+                      {action.isPriority && (
+                        <Text style={{ color: entityColor, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginTop: 4, opacity: 0.8 }}>★ PRIORITY</Text>
+                      )}
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedEntity(null)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                      <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+
+                      {/* Effort toggle */}
+                      <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 10 }}>EFFORT</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                        {efforts.map(e => {
+                          const sel = currentEffort === e;
+                          return (
+                            <TouchableOpacity
+                              key={e}
+                              style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', backgroundColor: sel ? entityColor + '22' : 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: sel ? entityColor + '66' : 'rgba(255,255,255,0.1)' }}
+                              onPress={() => {
+                                if (!action.nodeId || !action.__goalId) return;
+                                updateActionEffort(action.nodeId, action.__goalId, action.id, e);
+                                setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, effort: e } } : null);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={{ color: sel ? entityColor : theme.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>{e.toUpperCase()}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {/* Node dropdown */}
+                      <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 10 }}>NODE</Text>
+                      <View style={{ marginBottom: 16 }}>
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: actionSelNode ? actionSelNode.color + '55' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}
+                          onPress={() => { setActionNodeDropdownOpen(v => !v); setActionCoordDropdownOpen(false); }}
+                          activeOpacity={0.8}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            {actionSelNode && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: actionSelNode.color }} />}
+                            <Text style={{ color: actionSelNode ? actionSelNode.color : theme.textMuted, fontSize: 13, fontWeight: '700' }}>
+                              {actionSelNode ? actionSelNode.name : 'Select node…'}
+                            </Text>
+                          </View>
+                          <Text style={{ color: theme.textMuted, fontSize: 10 }}>{actionNodeDropdownOpen ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
+                        {actionNodeDropdownOpen && (
+                          <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(6,12,28,0.99)' }}>
+                            {nodes.map((n, i) => (
+                              <TouchableOpacity
+                                key={n.id}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: i < nodes.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: action.nodeId === n.id ? n.color + '14' : 'transparent' }}
+                                onPress={() => {
+                                  const newGoalId = n.goals.filter((g: any) => !g.archived)[0]?.id || '';
+                                  saveActionEdit(
+                                    { nodeId: action.nodeId, goalId: action.__goalId, actionId: action.id },
+                                    { title: action.title, nodeId: n.id, goalId: newGoalId, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '', effort: currentEffort }
+                                  );
+                                  setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, nodeId: n.id, __goalId: newGoalId } } : null);
+                                  setActionNodeDropdownOpen(false);
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: n.color }} />
+                                <Text style={{ flex: 1, color: action.nodeId === n.id ? n.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{n.name}</Text>
+                                {action.nodeId === n.id && <Text style={{ color: n.color, fontSize: 11 }}>✓</Text>}
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Coordinate dropdown */}
+                      <Text style={{ color: theme.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 10 }}>COORDINATE</Text>
+                      <View style={{ marginBottom: 20 }}>
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: actionSelNode ? actionSelNode.color + '44' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', opacity: actionSelNode ? 1 : 0.5 }}
+                          onPress={() => { if (actionSelNode) { setActionCoordDropdownOpen(v => !v); setActionNodeDropdownOpen(false); } }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={{ color: actionSelCoord ? (actionSelNode?.color || '#f0f4ff') : theme.textMuted, fontSize: 13, fontWeight: '600' }}>
+                            {actionSelCoord ? actionSelCoord.name : 'Select coordinate…'}
+                          </Text>
+                          <Text style={{ color: theme.textMuted, fontSize: 10 }}>{actionCoordDropdownOpen ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
+                        {actionCoordDropdownOpen && actionSelNode && (
+                          <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(6,12,28,0.99)' }}>
+                            {actionCoords.map((g: any, i: number) => (
+                              <TouchableOpacity
+                                key={g.id}
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: i < actionCoords.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: action.__goalId === g.id ? actionSelNode.color + '14' : 'transparent' }}
+                                onPress={() => {
+                                  saveActionEdit(
+                                    { nodeId: action.nodeId, goalId: action.__goalId, actionId: action.id },
+                                    { title: action.title, nodeId: action.nodeId, goalId: g.id, isPriority: !!action.isPriority, notes: action.notes || '', dueDate: action.dueDate || '', reminder: action.reminder || '', effort: currentEffort }
+                                  );
+                                  setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, __goalId: g.id, __goalName: g.name } } : null);
+                                  setActionCoordDropdownOpen(false);
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ flex: 1, color: action.__goalId === g.id ? actionSelNode.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{g.name}</Text>
+                                {action.__goalId === g.id && <Text style={{ color: actionSelNode.color, fontSize: 11 }}>✓</Text>}
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+
+                    </View>
+                  </ScrollView>
+
+                  {/* Mark as Done button */}
+                  <TouchableOpacity
+                    style={{ marginHorizontal: 20, marginBottom: 20, paddingVertical: 14, borderRadius: 14, backgroundColor: isCompleted ? 'rgba(255,255,255,0.05)' : entityColor + '22', borderWidth: 1, borderColor: isCompleted ? 'rgba(255,255,255,0.12)' : entityColor + '66', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                    onPress={() => {
+                      if (!action.nodeId || !action.__goalId) return;
+                      toggleAction(action.nodeId, action.__goalId, action.id);
+                      setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, completed: !isCompleted } } : null);
+                      Haptics.selectionAsync();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Svg width={16} height={16} viewBox="0 0 24 24">
+                      {isCompleted ? (
+                        <><Circle cx="12" cy="12" r="10" fill={entityColor} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
+                      ) : (
+                        <Circle cx="12" cy="12" r="10" fill="none" stroke={entityColor} strokeWidth="1.5" />
+                      )}
+                    </Svg>
+                    <Text style={{ color: isCompleted ? entityColor : entityColor, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 }}>
+                      {isCompleted ? '✓ DONE' : 'MARK AS DONE'}
+                    </Text>
+                  </TouchableOpacity>
+
+                </View>
+              </Pressable>
+            </Pressable>
+          );
+        })()}
+      </Modal>
 
       {/* Chart Explainer Modal */}
-      {explainerOpen && (
-        <Pressable 
-          style={[RNStyleSheet.absoluteFill, { zIndex: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.85)', padding: 24 }]} 
+      <Modal visible={explainerOpen} transparent animationType="fade" onRequestClose={() => setExplainerOpen(false)}>
+        <Pressable
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.85)', padding: 24 }}
           onPress={() => setExplainerOpen(false)}
         >
           <Pressable onPress={(e) => e.stopPropagation()}>
@@ -730,7 +1206,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
             </GlassCard>
           </Pressable>
         </Pressable>
-      )}
+      </Modal>
     </>
   );
 };

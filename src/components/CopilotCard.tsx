@@ -333,7 +333,11 @@ export const CopilotCard: React.FC<CopilotCardProps> = ({
         ) : null}
         <Text style={styles.insightHero}>
           {isLoading
-            ? 'Reading your energy···'
+            ? persona === 'Engineer'
+              ? 'Analyzing your data···'
+              : persona === 'Seeker'
+              ? 'Mapping your path···'
+              : 'Reading your energy···'
             : (primaryLine?.text ?? '')}
         </Text>
       </View>

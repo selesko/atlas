@@ -27,7 +27,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
     identityNotes, setIdentityNotes,
     devOverride, setDevOverride,
     themeMode, setThemeMode,
+    nodes,
+    restoreNode, restoreGoal, restoreAction,
   } = useAppStore();
+
+  const archivedNodes = nodes.filter(n => n.archived);
+  const archivedGoals = nodes.flatMap(n => n.goals.filter(g => g.archived).map(g => ({ ...g, nodeId: n.id, nodeName: n.name, nodeColor: n.color })));
+  const archivedActions = nodes.flatMap(n => n.goals.flatMap(g => g.actions.filter(a => a.archived).map(a => ({ ...a, nodeId: n.id, goalId: g.id, nodeName: n.name, nodeColor: n.color, goalName: g.name }))));
+  const hasArchived = archivedNodes.length > 0 || archivedGoals.length > 0 || archivedActions.length > 0;
   const theme = useTheme();
 
   const handleTensionSelect = (id: string, side: 'left' | 'right') => {
@@ -180,26 +187,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         })}
       </GlassCard>
 
-      {/* Identity Notes */}
-      <GlassCard style={styles.profileCard}>
-        <View style={styles.profileSectionHeaderRow}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.profileSectionIcon}>
-            <Path fill="none" stroke={theme.textMuted} strokeWidth={1.5} strokeLinecap="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-          </Svg>
-          <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>CONTEXT</Text>
-        </View>
-        <TextInput
-          style={[styles.profileTextArea, { color: theme.text, borderColor: theme.glassBorder, backgroundColor: theme.inputBg }]}
-          value={identityNotes}
-          onChangeText={setIdentityNotes}
-          placeholder="Who are you right now? What are you building, fighting, or becoming?"
-          placeholderTextColor={theme.textMuted}
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-        />
-      </GlassCard>
-
       {/* Theme Toggle */}
       <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
         <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>APPEARANCE</Text>
@@ -223,6 +210,66 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
           </View>
         </View>
       </View>
+
+      {/* Archive */}
+      {hasArchived && (
+        <GlassCard style={[styles.profileCard, { marginTop: 8 }]}>
+          <View style={styles.profileSectionHeaderRow}>
+            <Text style={[styles.profileSectionLabel, { color: theme.textMuted }]}>ARCHIVE</Text>
+          </View>
+
+          {archivedNodes.length > 0 && (
+            <View style={styles.archiveGroup}>
+              <Text style={[styles.archiveGroupLabel, { color: theme.textMuted }]}>NODES</Text>
+              {archivedNodes.map(n => (
+                <View key={n.id} style={styles.archiveRow}>
+                  <View style={[styles.archiveDot, { backgroundColor: n.color }]} />
+                  <Text style={[styles.archiveName, { color: theme.text }]}>{n.name}</Text>
+                  <TouchableOpacity onPress={() => restoreNode(n.id)} style={styles.restoreBtn} activeOpacity={0.7}>
+                    <Text style={[styles.restoreBtnText, { color: theme.accent }]}>RESTORE</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {archivedGoals.length > 0 && (
+            <View style={styles.archiveGroup}>
+              <Text style={[styles.archiveGroupLabel, { color: theme.textMuted }]}>COORDINATES</Text>
+              {archivedGoals.map(g => (
+                <View key={g.id} style={styles.archiveRow}>
+                  <View style={[styles.archiveDot, { backgroundColor: g.nodeColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.archiveName, { color: theme.text }]}>{g.name}</Text>
+                    <Text style={[styles.archiveMeta, { color: theme.textMuted }]}>{g.nodeName}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => restoreGoal(g.nodeId, g.id)} style={styles.restoreBtn} activeOpacity={0.7}>
+                    <Text style={[styles.restoreBtnText, { color: theme.accent }]}>RESTORE</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {archivedActions.length > 0 && (
+            <View style={styles.archiveGroup}>
+              <Text style={[styles.archiveGroupLabel, { color: theme.textMuted }]}>ACTIONS</Text>
+              {archivedActions.map(a => (
+                <View key={a.id} style={styles.archiveRow}>
+                  <View style={[styles.archiveDot, { backgroundColor: a.nodeColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.archiveName, { color: theme.text }]}>{a.title}</Text>
+                    <Text style={[styles.archiveMeta, { color: theme.textMuted }]}>{a.nodeName} · {a.goalName}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => restoreAction(a.nodeId, a.goalId, a.id)} style={styles.restoreBtn} activeOpacity={0.7}>
+                    <Text style={[styles.restoreBtnText, { color: theme.accent }]}>RESTORE</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </GlassCard>
+      )}
 
       {/* Developer Override */}
       <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
@@ -277,6 +324,14 @@ const styles = StyleSheet.create({
   themeToggleBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 2 },
   devOverrideSection: { marginTop: 24, padding: 16, borderWidth: 0.5, borderColor: '#E2E8F0', borderStyle: 'dashed', borderRadius: 12 },
   devOverrideLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 3, marginBottom: 10 },
+  archiveGroup: { marginBottom: 16 },
+  archiveGroupLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 8, opacity: 0.6 },
+  archiveRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  archiveDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  archiveName: { fontSize: 13, fontWeight: '600', flex: 1 },
+  archiveMeta: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5, marginTop: 1, opacity: 0.6 },
+  restoreBtn: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(56,189,248,0.3)' },
+  restoreBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
   devOverrideRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   systemAccessTier: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
 

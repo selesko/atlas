@@ -38,6 +38,8 @@ export default function App() {
   const [editingAction, setEditingAction] = useState<{ nodeId: string; goalId: string; actionId: string } | null>(null);
   const [editForm, setEditForm] = useState({ title: '', nodeId: '', goalId: '', isPriority: false, notes: '', dueDate: '', reminder: '' });
   const [editFormEffort, setEditFormEffort] = useState<'easy' | 'medium' | 'heavy'>('easy');
+  const [nodeDropdownOpen, setNodeDropdownOpen] = useState(false);
+  const [coordDropdownOpen, setCoordDropdownOpen] = useState(false);
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [addNodeForm, setAddNodeForm] = useState({ name: '', description: '', color: NODE_COLORS[0] });
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function App() {
     cognitiveModel, persona,
     updateValue, updateNode, updateGoal, addNode: storeAddNode, saveActionEdit,
     toggleAction, getNodeAvg, deleteAction, archiveAction,
+    archiveNode, deleteNode, archiveGoal, deleteGoal,
     setSession, loadUserData,
     setCognitiveModel,
   } = useAppStore();
@@ -654,6 +657,23 @@ export default function App() {
                     <TouchableOpacity key={c} onPress={() => setEditNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, editNodeForm.color === c && styles.addNodeSwatchSelected]} />
                   ))}
                 </View>
+                {/* Archive / Delete */}
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(251,191,36,0.4)', alignItems: 'center' }}
+                    onPress={() => { if (editingNodeId) { archiveNode(editingNodeId); setEditingNodeId(null); } }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>ARCHIVE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(251,113,133,0.4)', alignItems: 'center' }}
+                    onPress={() => { if (editingNodeId) { deleteNode(editingNodeId); setEditingNodeId(null); } }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ color: '#fb7185', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>DELETE</Text>
+                  </TouchableOpacity>
+                </View>
                 <View style={styles.actionRow}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
                     <Text style={styles.cancelBtnText}>CANCEL</Text>
@@ -696,8 +716,6 @@ export default function App() {
                   returnKeyType="done"
                   selectTextOnFocus
                 />
-                <Text style={styles.coordDetailSubtext}>Reflect on this coordinate and use the slider to score its integrity. Add actions below — things you do to keep this coordinate aligned.</Text>
-                <Text style={styles.reflectionQuestion}>HOW IS THE INTEGRITY OF THIS COORDINATE?</Text>
                 <View style={styles.sliderRow}>
                   <View style={styles.sliderTrack} onLayout={e => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
                     <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.3 }]} />
@@ -737,13 +755,32 @@ export default function App() {
                     </TouchableOpacity>
                   ))
                 )}
-                <TouchableOpacity style={styles.addCoordinateBtn} onPress={() => useAppStore.getState().addAction(node.id, goal.id, 'New Action')} activeOpacity={0.7}>
-                  <Text style={styles.addCoordinateText}>+ ADD ACTION</Text>
-                </TouchableOpacity>
               </ScrollView>
-              <TouchableOpacity style={[styles.coordEditDoneBtn, { alignSelf: 'flex-end', marginTop: 8 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
-                <Text style={styles.coordEditDoneText}>DONE</Text>
-              </TouchableOpacity>
+              {/* Bottom action row */}
+              <View style={{ marginTop: 12 }}>
+                {/* + ADD ACTION — prominent */}
+                <TouchableOpacity
+                  style={{ paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: node.color + '66', backgroundColor: node.color + '18', alignItems: 'center', marginBottom: 10 }}
+                  onPress={() => useAppStore.getState().addAction(node.id, goal.id, 'New Action')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ color: node.color, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>+ ADD ACTION</Text>
+                </TouchableOpacity>
+                {/* Archive / Delete / Done — small and muted */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', gap: 16 }}>
+                    <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} activeOpacity={0.6}>
+                      <Text style={{ color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>ARCHIVE</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { if (editingCoordinate) { deleteGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} activeOpacity={0.6}>
+                      <Text style={{ color: '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, opacity: 0.6 }}>DELETE</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
+                    <Text style={styles.coordEditDoneText}>DONE</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
         );
@@ -752,16 +789,24 @@ export default function App() {
       {/* Edit action overlay */}
       {!!editingAction && (
         <View style={styles.infoOverlay} pointerEvents="box-none">
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingAction(null)} activeOpacity={1} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} activeOpacity={1} />
           <View style={styles.taskEditCard} pointerEvents="auto">
-            <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+              {/* Title */}
               <Text style={styles.editFormLabel}>TITLE</Text>
-              <TextInput style={styles.editFormInput} value={editForm.title} onChangeText={t => setEditForm(f => ({ ...f, title: t }))} placeholderTextColor={THEME.textDim} />
+              <TextInput
+                style={[styles.editFormInput, { color: '#94a3b8' }]}
+                value={editForm.title}
+                onChangeText={t => setEditForm(f => ({ ...f, title: t }))}
+                placeholderTextColor={THEME.textDim}
+              />
+
+              {/* Effort */}
               <Text style={styles.editFormLabel}>EFFORT</Text>
-              <View style={styles.effortPickerRow}>
+              <View style={[styles.effortPickerRow, { marginBottom: 20 }]}>
                 {(['easy', 'medium', 'heavy'] as const).map(level => {
                   const sel = editFormEffort === level;
-                  const labels = { easy: 'EASY', medium: 'MEDIUM', heavy: 'HEAVY' };
                   return (
                     <TouchableOpacity
                       key={level}
@@ -769,75 +814,124 @@ export default function App() {
                       onPress={() => setEditFormEffort(level)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.effortPickerBtnText, { color: sel ? THEME.accent : THEME.textDim }]}>{labels[level]}</Text>
+                      <Text style={[styles.effortPickerBtnText, { color: sel ? THEME.accent : THEME.textDim }]}>{level.toUpperCase()}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {/* Node dropdown */}
               <Text style={styles.editFormLabel}>NODE</Text>
-              <View style={styles.taskEditChipRow}>
-                {nodes.map(n => {
-                  const sel = editForm.nodeId === n.id;
-                  return (
-                    <TouchableOpacity key={n.id} style={[styles.addTaskCoordChip, sel && { borderColor: n.color }]} onPress={() => setEditForm(f => ({ ...f, nodeId: n.id, goalId: n.goals[0]?.id || '' }))} activeOpacity={0.8}>
-                      <Text style={[styles.addTaskCoordChipText, sel && { color: n.color }]}>{n.name.toUpperCase()}</Text>
+              {(() => {
+                const selNode = nodes.find(n => n.id === editForm.nodeId);
+                return (
+                  <View style={{ marginBottom: 20 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '55' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}
+                      onPress={() => { setNodeDropdownOpen(v => !v); setCoordDropdownOpen(false); }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        {selNode && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selNode.color }} />}
+                        <Text style={{ color: selNode ? selNode.color : THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>
+                          {selNode ? selNode.name : 'Select node…'}
+                        </Text>
+                      </View>
+                      <Text style={{ color: THEME.textDim, fontSize: 10 }}>{nodeDropdownOpen ? '▲' : '▼'}</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    {nodeDropdownOpen && (
+                      <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
+                        {nodes.map((n, i) => (
+                          <TouchableOpacity
+                            key={n.id}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < nodes.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.nodeId === n.id ? n.color + '14' : 'transparent' }}
+                            onPress={() => { setEditForm(f => ({ ...f, nodeId: n.id, goalId: n.goals[0]?.id || '' })); setNodeDropdownOpen(false); }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: n.color }} />
+                            <Text style={{ color: editForm.nodeId === n.id ? n.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{n.name}</Text>
+                            {editForm.nodeId === n.id && <Text style={{ marginLeft: 'auto', color: n.color, fontSize: 11 }}>✓</Text>}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+
+              {/* Coordinate dropdown */}
               <Text style={styles.editFormLabel}>COORDINATE</Text>
-              <View style={styles.taskEditChipRow}>
-                {(nodes.find(n => n.id === editForm.nodeId)?.goals || []).map(g => {
-                  const sel = editForm.goalId === g.id;
-                  const node = nodes.find(n => n.id === editForm.nodeId);
-                  return (
-                    <TouchableOpacity key={g.id} style={[styles.addTaskCoordChip, sel && node && { borderColor: node.color }]} onPress={() => setEditForm(f => ({ ...f, goalId: g.id }))} activeOpacity={0.8}>
-                      <Text style={[styles.addTaskCoordChipText, sel && node && { color: node.color }]}>{g.name}</Text>
+              {(() => {
+                const selNode = nodes.find(n => n.id === editForm.nodeId);
+                const coords = selNode?.goals.filter(g => !g.archived) || [];
+                const selCoord = coords.find(g => g.id === editForm.goalId);
+                return (
+                  <View style={{ marginBottom: 20 }}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '44' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', opacity: selNode ? 1 : 0.5 }}
+                      onPress={() => { if (selNode) { setCoordDropdownOpen(v => !v); setNodeDropdownOpen(false); } }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: selCoord ? (selNode?.color || '#f0f4ff') : THEME.textDim, fontSize: 13, fontWeight: '600' }}>
+                        {selCoord ? selCoord.name : 'Select coordinate…'}
+                      </Text>
+                      <Text style={{ color: THEME.textDim, fontSize: 10 }}>{coordDropdownOpen ? '▲' : '▼'}</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <Text style={styles.editFormLabel}>FOCUS (PRIORITY)</Text>
-              <TouchableOpacity style={styles.taskEditFocusRow} onPress={() => setEditForm(f => ({ ...f, isPriority: !f.isPriority }))} activeOpacity={0.8}>
-                <Svg width={20} height={20} viewBox="0 0 24 24">
+                    {coordDropdownOpen && selNode && (
+                      <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
+                        {coords.map((g, i) => (
+                          <TouchableOpacity
+                            key={g.id}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < coords.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.goalId === g.id ? selNode.color + '14' : 'transparent' }}
+                            onPress={() => { setEditForm(f => ({ ...f, goalId: g.id })); setCoordDropdownOpen(false); }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ flex: 1, color: editForm.goalId === g.id ? selNode.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{g.name}</Text>
+                            {editForm.goalId === g.id && <Text style={{ color: selNode.color, fontSize: 11 }}>✓</Text>}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+
+              {/* Priority */}
+              <TouchableOpacity style={[styles.taskEditFocusRow, { marginBottom: 20 }]} onPress={() => setEditForm(f => ({ ...f, isPriority: !f.isPriority }))} activeOpacity={0.8}>
+                <Svg width={18} height={18} viewBox="0 0 24 24">
                   {editForm.isPriority ? (
                     <Path fill={THEME.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   ) : (
                     <Path fill="none" stroke={THEME.textDim} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   )}
                 </Svg>
-                <Text style={[styles.addTaskCoordChipText, { marginLeft: 8 }]}>{editForm.isPriority ? 'PRIORITY' : 'NOT PRIORITY'}</Text>
+                <Text style={{ marginLeft: 8, color: editForm.isPriority ? THEME.accent : THEME.textDim, fontSize: 12, fontWeight: '700', letterSpacing: 1.5 }}>
+                  {editForm.isPriority ? 'PRIORITY' : 'SET AS PRIORITY'}
+                </Text>
               </TouchableOpacity>
-              <Text style={styles.evidenceLabel}>NOTES</Text>
-              <TextInput style={styles.taskEditNotes} value={editForm.notes} onChangeText={t => setEditForm(f => ({ ...f, notes: t }))} placeholder="Add notes…" placeholderTextColor={THEME.textDim} multiline numberOfLines={3} />
-              <Text style={styles.evidenceLabel}>DUE DATE</Text>
-              <TextInput style={styles.evidenceInput} value={editForm.dueDate} onChangeText={t => setEditForm(f => ({ ...f, dueDate: t }))} placeholder="YYYY-MM-DD" placeholderTextColor={THEME.textDim} />
-              <Text style={styles.evidenceLabel}>REMINDER</Text>
-              <TextInput style={styles.evidenceInput} value={editForm.reminder} onChangeText={t => setEditForm(f => ({ ...f, reminder: t }))} placeholder="e.g. 9:00 AM" placeholderTextColor={THEME.textDim} />
+
+              {/* Notes */}
+              <Text style={styles.editFormLabel}>NOTES</Text>
+              <TextInput style={[styles.taskEditNotes, { marginBottom: 20 }]} value={editForm.notes} onChangeText={t => setEditForm(f => ({ ...f, notes: t }))} placeholder="Add notes…" placeholderTextColor={THEME.textDim} multiline numberOfLines={3} />
+
             </ScrollView>
-            {/* Destructive actions */}
-            <View style={styles.editDestructiveRow}>
+
+            {/* Bottom row: archive/delete muted + DONE */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.07)' }}>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <TouchableOpacity onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} activeOpacity={0.6}>
+                  <Text style={{ color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>ARCHIVE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} activeOpacity={0.6}>
+                  <Text style={{ color: '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, opacity: 0.6 }}>DELETE</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={styles.editArchiveBtn}
-                onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }}
+                style={{ paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, backgroundColor: 'rgba(56,189,248,0.12)', borderWidth: 1, borderColor: 'rgba(56,189,248,0.35)' }}
+                onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.editArchiveBtnText}>ARCHIVE</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.editDeleteBtn}
-                onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.editDeleteBtnText}>DELETE</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingAction(null)} activeOpacity={0.7}>
-                <Text style={styles.cancelBtnText}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); }} activeOpacity={0.7}>
-                <Text style={styles.submitBtnText}>DONE</Text>
+                <Text style={{ color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>DONE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1108,7 +1202,7 @@ const styles = StyleSheet.create({
   taskEditScroll: { maxHeight: 380 },
   taskEditChipRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
   taskEditFocusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingVertical: 8 },
-  taskEditNotes: { color: THEME.border, fontSize: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
+  taskEditNotes: { color: '#94a3b8', fontSize: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 12, minHeight: 72, textAlignVertical: 'top', marginBottom: 16 },
   addTaskCoordChip: { paddingVertical: 6, paddingHorizontal: 14, marginRight: 8, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
   addTaskCoordChipText: { color: THEME.textDim, fontSize: 14, fontWeight: '600' },
   taskTitleStrike: { textDecorationLine: 'line-through' },

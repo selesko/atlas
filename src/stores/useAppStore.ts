@@ -54,10 +54,20 @@ interface AppState {
   addNode: (name: string, description: string, color: string, why?: string) => void;
   updateNode: (nodeId: string, patch: Partial<Pick<Node, 'name' | 'description' | 'color' | 'why'>>) => void;
 
+  // Node/Goal archive & delete
+  archiveNode: (nodeId: string) => void;
+  restoreNode: (nodeId: string) => void;
+  deleteNode: (nodeId: string) => void;
+  archiveGoal: (nodeId: string, goalId: string) => void;
+  restoreGoal: (nodeId: string, goalId: string) => void;
+  deleteGoal: (nodeId: string, goalId: string) => void;
+  restoreAction: (nodeId: string, goalId: string, actionId: string) => void;
+
   // Action management
   toggleAction: (nodeId: string, goalId: string, actionId: string) => void;
   togglePriority: (nodeId: string, goalId: string, actionId: string) => void;
   addAction: (nodeId: string, goalId: string, title: string, effort?: ActionEffort) => void;
+  updateActionEffort: (nodeId: string, goalId: string, actionId: string, effort: ActionEffort) => void;
   deleteAction: (nodeId: string, goalId: string, actionId: string) => void;
   archiveAction: (nodeId: string, goalId: string, actionId: string) => void;
   saveActionEdit: (
@@ -257,6 +267,47 @@ export const useAppStore = create<AppState>()(
     }
   },
 
+  // ─── Node/Goal archive & delete ─────────────────────────────────────────────
+
+  archiveNode: (nodeId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, archived: true }) }));
+    const userId = get().session?.user.id;
+    if (userId) { const node = get().nodes.find(n => n.id === nodeId); const idx = get().nodes.findIndex(n => n.id === nodeId); if (node) upsertNode(userId, node, idx); }
+  },
+
+  restoreNode: (nodeId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, archived: false }) }));
+    const userId = get().session?.user.id;
+    if (userId) { const node = get().nodes.find(n => n.id === nodeId); const idx = get().nodes.findIndex(n => n.id === nodeId); if (node) upsertNode(userId, node, idx); }
+  },
+
+  deleteNode: (nodeId) => {
+    set(state => ({ nodes: state.nodes.filter(n => n.id !== nodeId) }));
+  },
+
+  archiveGoal: (nodeId, goalId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, goals: n.goals.map(g => g.id !== goalId ? g : { ...g, archived: true }) }) }));
+    const userId = get().session?.user.id;
+    if (userId) { const node = get().nodes.find(n => n.id === nodeId); const goal = node?.goals.find(g => g.id === goalId); const idx = node?.goals.findIndex(g => g.id === goalId) ?? 0; if (goal) upsertCoordinate(userId, nodeId, goal, idx); }
+  },
+
+  restoreGoal: (nodeId, goalId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, goals: n.goals.map(g => g.id !== goalId ? g : { ...g, archived: false }) }) }));
+    const userId = get().session?.user.id;
+    if (userId) { const node = get().nodes.find(n => n.id === nodeId); const goal = node?.goals.find(g => g.id === goalId); const idx = node?.goals.findIndex(g => g.id === goalId) ?? 0; if (goal) upsertCoordinate(userId, nodeId, goal, idx); }
+  },
+
+  deleteGoal: (nodeId, goalId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, goals: n.goals.filter(g => g.id !== goalId) }) }));
+  },
+
+  restoreAction: (nodeId, goalId, actionId) => {
+    set(state => ({ nodes: state.nodes.map(n => n.id !== nodeId ? n : { ...n, goals: n.goals.map(g => g.id !== goalId ? g : { ...g, actions: g.actions.map(a => a.id !== actionId ? a : { ...a, archived: false }) }) }) }));
+    const userId = get().session?.user.id;
+    const action = get().nodes.find(n => n.id === nodeId)?.goals.find(g => g.id === goalId)?.actions.find(a => a.id === actionId);
+    if (userId && action) upsertAction(userId, nodeId, goalId, { ...action, archived: false });
+  },
+
   // ─── Action management ──────────────────────────────────────────────────────
 
   toggleAction: (nodeId, goalId, actionId) => {
@@ -340,6 +391,27 @@ export const useAppStore = create<AppState>()(
     }));
     const userId = get().session?.user.id;
     if (userId) upsertAction(userId, nodeId, goalId, newAction);
+  },
+
+  updateActionEffort: (nodeId, goalId, actionId, effort) => {
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id !== nodeId ? n : {
+          ...n,
+          goals: n.goals.map(g =>
+            g.id !== goalId ? g : {
+              ...g,
+              actions: g.actions.map(a => a.id !== actionId ? a : { ...a, effort }),
+            }
+          ),
+        }
+      ),
+    }));
+    const userId = get().session?.user.id;
+    if (userId) {
+      const action = get().nodes.find(n => n.id === nodeId)?.goals.find(g => g.id === goalId)?.actions.find(a => a.id === actionId);
+      if (action) upsertAction(userId, nodeId, goalId, action);
+    }
   },
 
   deleteAction: (nodeId, goalId, actionId) => {

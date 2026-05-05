@@ -93,9 +93,11 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
     });
   }, [selectedNodeId, session]);
 
+  const activeNodes = nodes.filter(n => !n.archived);
+
   return (
     <View>
-      {nodes.map((node: Node) => (
+      {activeNodes.map((node: Node) => (
         <GlassCard
           key={node.id}
           style={[styles.nodeBlock, { shadowColor: node.color }]}
@@ -108,11 +110,23 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                 </View>
                 <View style={styles.nodeTitleRow}>
                   {selectedNodeId === node.id ? (
-                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); onOpenEditNode(node.id); }} activeOpacity={0.8}>
-                      <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
+                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); onOpenEditNode(node.id); }} activeOpacity={0.8} style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.nodeTitle, { color: node.color, letterSpacing: node.name.length > 8 ? 3 : 8 }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {node.name.toUpperCase()}
+                      </Text>
                     </TouchableOpacity>
                   ) : (
-                    <Text style={[styles.nodeTitle, { color: node.color }]}>{node.name.toUpperCase()}</Text>
+                    <Text
+                      style={[styles.nodeTitle, { color: node.color, letterSpacing: node.name.length > 8 ? 3 : 8 }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {node.name.toUpperCase()}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -124,27 +138,6 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
             <View style={styles.nodeExpanded}>
               <View style={[styles.divider, { backgroundColor: theme.divider }]} />
 
-              {/* ── AI guidance ───────────────────────────────────────────── */}
-              {session && (() => {
-                const intent = nodeIntents[node.id];
-                if (intent === 'loading') {
-                  return (
-                    <View style={styles.intentRow}>
-                      <Text style={[styles.intentPrefix, { color: node.color }]}>✦</Text>
-                      <Text style={[styles.intentLoading, { color: theme.textMuted }]}>calibrating…</Text>
-                    </View>
-                  );
-                }
-                if (intent) {
-                  return (
-                    <View style={styles.intentRow}>
-                      <Text style={[styles.intentPrefix, { color: node.color }]}>✦</Text>
-                      <Text style={[styles.intentText, { color: theme.textSub }]}>{intent}</Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
 
               {node.description ? (
                 <>
@@ -153,7 +146,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                 </>
               ) : null}
               <Text style={[styles.coordinatesLabel, { color: theme.textMuted }]}>ACTIVE COORDINATE</Text>
-              {node.goals.map(goal => {
+              {node.goals.filter(g => !g.archived).map(goal => {
                 const key = `${node.id}-${goal.id}`;
                 const applySlider = (evt: { nativeEvent: { locationX: number } }) => {
                   const w = trackWidths.current[key] || width - 40;
@@ -243,10 +236,10 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
 const styles = StyleSheet.create({
   nodeBlock: { marginBottom: 12, borderRadius: 16, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 30, alignItems: 'center', paddingHorizontal: 20 },
-  nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  nodeHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1, marginRight: 8 },
   nodeIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   nodeIconLetter: { color: 'white', fontSize: 18, fontWeight: '700' },
-  nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   nodeTitle: { fontSize: 22, fontWeight: '600', letterSpacing: 8 },
   nodeScore: { color: 'white', fontSize: 20, fontWeight: '600' },
   goalNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

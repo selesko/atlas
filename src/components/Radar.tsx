@@ -56,7 +56,7 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
   }, [nodes]);
 
   const allActions = useMemo(() => {
-    return nodes.flatMap(n => n.goals.flatMap(g => g.actions.map(a => ({ ...a, nodeId: n.id, nodeColor: n.color, __goalId: g.id }))));
+    return nodes.flatMap(n => n.goals.flatMap(g => g.actions.map(a => ({ ...a, nodeId: n.id, nodeColor: n.color, __goalId: g.id, __goalName: g.name }))));
   }, [nodes]);
 
   const handleSvgPress = (e: any) => {

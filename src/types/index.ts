@@ -21,6 +21,7 @@ export interface Goal {
   value: number;
   actions: Action[];
   scoreHistory?: Array<{ date: string; value: number }>;
+  archived?: boolean;
 }
 
 export interface Node {
@@ -30,6 +31,7 @@ export interface Node {
   description: string;
   why?: string;
   goals: Goal[];
+  archived?: boolean;
 }
 
 export type CognitiveModel = 'Architect' | 'Strategist' | 'Builder' | 'Analyst';

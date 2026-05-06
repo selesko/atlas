@@ -326,20 +326,22 @@ export const CopilotCard: React.FC<CopilotCardProps> = ({
 
       {/* ── Primary insight (hero) ── */}
       <View style={[styles.insightBlock, isLoading && { opacity: 0.35 }]}>
-        {primaryLine?.prefix ? (
-          <Text style={[styles.insightLabel, { color: accentColor }]}>
-            {primaryLine.prefix.toUpperCase()}
+        <View style={[styles.insightCallout, { borderColor: accentColor + '20' }]}>
+          {primaryLine?.prefix ? (
+            <Text style={[styles.insightLabel, { color: accentColor }]}>
+              {primaryLine.prefix.toUpperCase()}
+            </Text>
+          ) : null}
+          <Text style={styles.insightHero}>
+            {isLoading
+              ? (persona === 'Engineer'
+                ? 'Analyzing your data···'
+                : persona === 'Seeker'
+                ? 'Mapping your path···'
+                : 'Reading your energy···')
+              : (primaryLine?.text ?? '')}
           </Text>
-        ) : null}
-        <Text style={styles.insightHero}>
-          {isLoading
-            ? persona === 'Engineer'
-              ? 'Analyzing your data···'
-              : persona === 'Seeker'
-              ? 'Mapping your path···'
-              : 'Reading your energy···'
-            : (primaryLine?.text ?? '')}
-        </Text>
+        </View>
       </View>
 
       {/* ── Actions (max 2) ── */}
@@ -500,14 +502,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2.5,
     marginBottom: 6,
-    opacity: 0.7,
+    opacity: 0.8,
+  },
+  insightCallout: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
   },
   insightHero: {
     color: '#E2E8F0',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
-    letterSpacing: 0.15,
-    lineHeight: 24,
+    letterSpacing: 0.1,
+    lineHeight: 22,
+    fontStyle: 'italic',
   },
 
   // Actions

@@ -9,6 +9,9 @@ import Svg, {
   RadialGradient, Stop, Line, LinearGradient,
   Text as SvgText,
 } from 'react-native-svg';
+
+const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 import * as Haptics from 'expo-haptics';
 import { useAppStore } from '../stores/useAppStore';
 import { FadingBorder } from '../components/FadingBorder';
@@ -186,6 +189,7 @@ interface AtlasScreenProps {
   onOpenAction?: (nodeId: string, goalId: string, actionId: string) => void;
   onGoToNode?: (nodeId: string) => void;
   onGoToActions?: (nodeId: string) => void;
+  onGoToEvaluate?: () => void;
 }
 
 const ACTION_BTN_LABELS: Record<string, string> = {
@@ -237,6 +241,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const coordSliderTrackWidth = useRef<number>(0);
   const nodeCardTrackWidths = useRef<Record<string, number>>({});
   const radarRotation = useRef(new Animated.Value(0)).current;
+  const currentRotationRef = useRef(0);
   const radarScale = useRef(new Animated.Value(1)).current;
   const nodeBreathAnim = useRef(new Animated.Value(0)).current;
   const zoomAnim = useRef(new Animated.Value(1)).current;
@@ -266,6 +271,9 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   // Radar rotation
   useEffect(() => {
     radarRotation.setValue(0);
+    const sub = radarRotation.addListener(({ value }) => {
+      currentRotationRef.current = value;
+    });
     Animated.loop(
       Animated.timing(radarRotation, {
         toValue: 1,
@@ -274,6 +282,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         useNativeDriver: false,
       })
     ).start();
+    return () => radarRotation.removeListener(sub);
   }, [atlasGraphView]);
 
   // Radar pulse scale
@@ -307,6 +316,57 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
   const radarRotStyle = {
     transform: [{ rotate: radarRotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
   };
+
+  const EmptyStateAtlas = () => (
+    <View style={styles.emptyStateContainer}>
+      <Animated.View style={[styles.radarRotWrap, radarRotStyle]}>
+        <Svg width={340} height={340} viewBox="0 0 340 340">
+          <G transform="translate(170, 170)">
+            {/* Pulsing Ghost Orbits */}
+            {[60, 90, 120].map((r, i) => (
+              <Circle 
+                key={r} 
+                r={r} 
+                stroke={theme.accent} 
+                strokeWidth="1" 
+                fill="none" 
+                opacity={0.05 + (i * 0.02)} 
+                strokeDasharray="4, 8"
+              />
+            ))}
+            {/* Ghost Nodes */}
+            {[0, 120, 240].map((angle, i) => {
+              const rad = (angle * Math.PI) / 180 - Math.PI / 2;
+              const r = 90;
+              return (
+                <Circle 
+                  key={i} 
+                  cx={r * Math.cos(rad)} 
+                  cy={r * Math.sin(rad)} 
+                  r={8} 
+                  fill={theme.accent} 
+                  opacity={0.1} 
+                />
+              );
+            })}
+            {/* Central Pulsing Core */}
+            <Circle cx={0} cy={0} r={16} fill={theme.accent} opacity={0.15} />
+            <Circle cx={0} cy={0} r={6} fill={theme.accent} />
+          </G>
+        </Svg>
+      </Animated.View>
+      <View style={styles.emptyStateOverlay}>
+        <Text style={styles.emptyStateTitle}>SYSTEM OFFLINE</Text>
+        <Text style={styles.emptyStateBody}>Your life map is empty. Begin by adding your first core nodes to the system.</Text>
+        <TouchableOpacity 
+          style={[styles.primaryBtn, { paddingHorizontal: 24, marginTop: 12 }]} 
+          onPress={onGoToEvaluate}
+        >
+          <Text style={styles.primaryBtnText}>BEGIN YOUR SYSTEM</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
 
 
@@ -521,83 +581,76 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
             {/* Render Graphic with Jump Drive Zoom Effect */}
             <Animated.View style={[{ flex: 1 }, { opacity: zoomAnim, transform: [{ scale: zoomAnim }] }]}>
-              {atlasGraphView === 'nodes' && (
-                <View style={styles.radarWrapper}>
-                  <Animated.View style={[styles.radarRotWrap, radarRotStyle]}>
-                    <Svg width={340} height={340} viewBox="0 0 340 340" onPress={(e: any) => {
-                      const locX = e.nativeEvent.locationX;
-                      const locY = e.nativeEvent.locationY;
-                      let clickedNode = null;
-                      const pts = radarPts.map(p => ({ ...p, x: p.x + 170, y: p.y + 170 }));
-                      for (const p of pts) {
-                        if (Math.sqrt(Math.pow(p.x - locX, 2) + Math.pow(p.y - locY, 2)) < 40) {
-                          clickedNode = p;
-                          break;
-                        }
-                      }
-                      if (clickedNode) {
-                        const fullNode = nodes.find(n => n.id === clickedNode.id);
-                        if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
-                      } else {
-                        setExplainerOpen(true);
-                      }
-                    }}>
-                      <Defs>
-                        {nodes.map(n => (
-                          <RadialGradient key={n.id} id={`glow-${n.id}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                            <Stop offset="0%" stopColor={n.color} stopOpacity="1" />
-                            <Stop offset="20%" stopColor={n.color} stopOpacity="0.8" />
-                            <Stop offset="50%" stopColor={n.color} stopOpacity="0.4" />
-                            <Stop offset="80%" stopColor={n.color} stopOpacity="0.15" />
-                            <Stop offset="100%" stopColor={n.color} stopOpacity="0" />
-                          </RadialGradient>
-                        ))}
-                      </Defs>
-                      <G transform="translate(170, 170)">
-                        <G opacity={isDark ? 0.06 : 0.2}>
-                          {[30, 60, 90, 120].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
-                        </G>
-                        {(() => {
-                          const breathRadius = 9;
-                          return (
-                            <>
-                              {/* Central Sun */}
-                              <Circle cx={0} cy={0} r={14} fill="#FFFFFF" />
-                              <Circle cx={0} cy={0} r={28} fill="#FFFFFF" opacity={0.15} />
-                              <Circle cx={0} cy={0} r={46} fill="#FFFFFF" opacity={0.05} />
-                              
-                              {/* Orbits, Radials, and Nodes */}
-                              {radarPts.map((p, i) => {
-                                const hi = atlasHighlightId === p.id;
-                                const isActive = !atlasHighlightId || hi;
-                                const nodeColor = isActive ? p.color : theme.divider;
-                                return (
-                                  <G key={i} pointerEvents="none">
-                                    {isActive && (
-                                      <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} />
-                                    )}
-                                    <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={nodeColor} opacity={isActive ? 1 : 0.25} />
-                                  </G>
-                                );
-                              })}
-                            </>
-                          );
-                        })()}
-                      </G>
-                    </Svg>
-                  </Animated.View>
-                </View>
-              )}
+              {nodes.length === 0 ? (
+                <EmptyStateAtlas />
+              ) : (
+                <>
+                  {atlasGraphView === 'nodes' && (
+                    <View style={styles.radarWrapper}>
+                      <Animated.View style={[styles.radarRotWrap, { transform: [{ rotate: radarRotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }]}>
+                        <Svg width={340} height={340} viewBox="0 0 340 340" onPress={() => setExplainerOpen(true)}>
+                          <Defs>
+                            {nodes.map(n => (
+                              <RadialGradient key={n.id} id={`glow-${n.id}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                                <Stop offset="0%" stopColor={n.color} stopOpacity="1" />
+                                <Stop offset="20%" stopColor={n.color} stopOpacity="0.8" />
+                                <Stop offset="50%" stopColor={n.color} stopOpacity="0.4" />
+                                <Stop offset="80%" stopColor={n.color} stopOpacity="0.15" />
+                                <Stop offset="100%" stopColor={n.color} stopOpacity="0" />
+                              </RadialGradient>
+                            ))}
+                          </Defs>
+                          <G transform="translate(170, 170)">
+                            <G opacity={isDark ? 0.06 : 0.2}>
+                              {[30, 60, 90, 120].map(r => <Circle key={r} r={r} stroke={isDark ? "#C0C0C0" : "#FEF08A"} strokeWidth="0.5" fill="none" />)}
+                            </G>
+                            
+                            {/* Central Sun */}
+                            <Circle cx={0} cy={0} r={14} fill="#FFFFFF" />
+                            <Circle cx={0} cy={0} r={28} fill="#FFFFFF" opacity={0.15} />
+                            <Circle cx={0} cy={0} r={46} fill="#FFFFFF" opacity={0.05} />
+                            
+                            {/* Orbits, Radials, and Nodes */}
+                            {radarPts.map((p, i) => {
+                              const hi = atlasHighlightId === p.id;
+                              const isActive = !atlasHighlightId || hi;
+                              const nodeColor = isActive ? p.color : theme.divider;
+                              const breathRadius = 9;
+                              return (
+                                <G key={i}>
+                                  {/* Interaction circle */}
+                                  <Circle 
+                                    cx={p.x} cy={p.y} r={40} 
+                                    fill="transparent" 
+                                    onPress={() => {
+                                      const fullNode = nodes.find(n => n.id === p.id);
+                                      if (fullNode) setSelectedEntity({ type: 'node', data: fullNode });
+                                    }} 
+                                  />
+                                  {isActive && (
+                                    <Circle cx={p.x} cy={p.y} r={hi ? breathRadius + 32 : breathRadius + 22} fill={`url(#glow-${p.id})`} opacity={0.75} pointerEvents="none" />
+                                  )}
+                                  <Circle cx={p.x} cy={p.y} r={hi ? 12 : 9} fill={nodeColor} opacity={isActive ? 1 : 0.25} pointerEvents="none" />
+                                </G>
+                              );
+                            })}
+                          </G>
+                        </Svg>
+                      </Animated.View>
+                    </View>
+                  )}
 
-              {atlasGraphView !== 'nodes' && (
-                <Radar 
-                  nodes={nodes} 
-                  view={atlasGraphView} 
-                  theme={theme} 
-                  activeNodeId={atlasHighlightId} 
-                  onEntityPress={(type, data) => setSelectedEntity({ type, data })}
-                  onEmptyPress={() => setExplainerOpen(true)}
-                />
+                  {atlasGraphView !== 'nodes' && (
+                    <Radar 
+                      nodes={nodes} 
+                      view={atlasGraphView} 
+                      theme={theme} 
+                      activeNodeId={atlasHighlightId} 
+                      onEntityPress={(type, data) => setSelectedEntity({ type, data })}
+                      onEmptyPress={() => setExplainerOpen(true)}
+                    />
+                  )}
+                </>
               )}
             </Animated.View>
 
@@ -736,15 +789,22 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                       </Svg>
                     </View>
                     {/* Tab bar */}
-                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 2, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 10, gap: 8 }}>
                       {(['coordinates', 'actions'] as const).map(tab => {
                         const active = cardTab === tab;
-                        const openCount = allNodeActions.filter((a: any) => !a.completed).length;
-                        const label = tab === 'coordinates' ? 'COORDINATES' : `ACTIONS${openCount > 0 ? ` · ${openCount}` : ''}`;
+                        const label = tab === 'coordinates' ? 'COORDINATES' : 'ACTIONS';
                         return (
                           <TouchableOpacity
                             key={tab}
-                            style={{ flex: 1, paddingVertical: 9, alignItems: 'center', backgroundColor: active ? node.color + '22' : 'transparent', borderBottomWidth: 2, borderBottomColor: active ? node.color : 'transparent' }}
+                            style={{ 
+                              flex: 1, 
+                              paddingVertical: 9, 
+                              alignItems: 'center', 
+                              backgroundColor: active ? node.color + '33' : 'rgba(255,255,255,0.03)', 
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: active ? node.color + '66' : 'rgba(255,255,255,0.05)'
+                            }}
                             onPress={() => setCardTab(tab)}
                             activeOpacity={0.7}
                           >
@@ -856,41 +916,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               </View>
                             );
                           })}
-                          {/* Inline add action */}
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, marginBottom: 8 }}>
-                            <TextInput
-                              style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '500', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, borderWidth: 1, borderColor: node.color + '33' }}
-                              placeholder="New action…"
-                              placeholderTextColor={theme.textMuted}
-                              value={newActionTitle}
-                              onChangeText={setNewActionTitle}
-                              returnKeyType="done"
-                              autoCorrect={false}
-                              autoCapitalize="none"
-                              onSubmitEditing={() => {
-                                if (!newActionTitle.trim() || node.goals.filter((g: any) => !g.archived).length === 0) return;
-                                const firstGoal = node.goals.filter((g: any) => !g.archived)[0];
-                                addAction(node.id, firstGoal.id, newActionTitle.trim(), 'easy');
-                                const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
-                                if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
-                                setNewActionTitle('');
-                              }}
-                            />
-                            <TouchableOpacity
-                              style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: node.color + '22', borderWidth: 1, borderColor: node.color + '55' }}
-                              onPress={() => {
-                                if (!newActionTitle.trim() || node.goals.filter((g: any) => !g.archived).length === 0) return;
-                                const firstGoal = node.goals.filter((g: any) => !g.archived)[0];
-                                addAction(node.id, firstGoal.id, newActionTitle.trim(), 'easy');
-                                const freshNode = useAppStore.getState().nodes.find(n => n.id === node.id);
-                                if (freshNode) setSelectedEntity(prev => prev ? { ...prev, data: freshNode } : null);
-                                setNewActionTitle('');
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={{ color: node.color, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ADD</Text>
-                            </TouchableOpacity>
-                          </View>
                         </View>
                       )}
                     </ScrollView>
@@ -934,7 +959,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                     </View>
 
                     {/* Tab bar */}
-                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 2, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                    <View style={{ flexDirection: 'row', marginHorizontal: 20, marginTop: 14, marginBottom: 10, gap: 8 }}>
                       {(['details', 'actions'] as const).map(tab => {
                         const active = cardTab === tab;
                         const openCount = pendingActions.length;
@@ -942,7 +967,15 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                         return (
                           <TouchableOpacity
                             key={tab}
-                            style={{ flex: 1, paddingVertical: 9, alignItems: 'center', backgroundColor: active ? entityColor + '22' : 'transparent', borderBottomWidth: 2, borderBottomColor: active ? entityColor : 'transparent' }}
+                            style={{ 
+                              flex: 1, 
+                              paddingVertical: 9, 
+                              alignItems: 'center', 
+                              backgroundColor: active ? entityColor + '33' : 'rgba(255,255,255,0.03)', 
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: active ? entityColor + '66' : 'rgba(255,255,255,0.05)'
+                            }}
                             onPress={() => setCardTab(tab)}
                             activeOpacity={0.7}
                           >
@@ -1043,39 +1076,6 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
                               </View>
                             );
                           })}
-                          {/* Inline add */}
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, marginBottom: 8 }}>
-                            <TextInput
-                              style={{ flex: 1, color: theme.text, fontSize: 13, fontWeight: '500', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, borderWidth: 1, borderColor: entityColor + '33' }}
-                              placeholder="New action…"
-                              placeholderTextColor={theme.textMuted}
-                              value={newActionTitle}
-                              onChangeText={setNewActionTitle}
-                              returnKeyType="done"
-                              autoCorrect={false}
-                              autoCapitalize="none"
-                              onSubmitEditing={() => {
-                                if (!newActionTitle.trim()) return;
-                                addAction(coord.nodeId, coord.id, newActionTitle.trim(), 'easy');
-                                const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
-                                if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
-                                setNewActionTitle('');
-                              }}
-                            />
-                            <TouchableOpacity
-                              style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: entityColor + '22', borderWidth: 1, borderColor: entityColor + '55' }}
-                              onPress={() => {
-                                if (!newActionTitle.trim()) return;
-                                addAction(coord.nodeId, coord.id, newActionTitle.trim(), 'easy');
-                                const freshGoal = useAppStore.getState().nodes.find(n => n.id === coord.nodeId)?.goals.find((g: any) => g.id === coord.id);
-                                if (freshGoal) setSelectedEntity(prev => prev ? { ...prev, data: { ...prev.data, actions: freshGoal.actions } } : null);
-                                setNewActionTitle('');
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={{ color: entityColor, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>ADD</Text>
-                            </TouchableOpacity>
-                          </View>
                         </View>
                       )}
                     </ScrollView>
@@ -1258,17 +1258,14 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
         onRequestClose={() => setTrajectoryOpen(false)}
       >
         <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' }}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
           onPress={() => setTrajectoryOpen(false)}
         >
-          <Pressable onPress={e => e.stopPropagation()}>
-            <View style={{ backgroundColor: 'rgba(8,14,30,0.99)', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.08)', paddingBottom: 32 }}>
+          <Pressable onPress={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 420 }}>
+            <View style={{ backgroundColor: 'rgba(10,18,36,0.98)', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingBottom: 32, overflow: 'hidden' }}>
 
-              {/* Handle + header */}
-              <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.15)' }} />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 6 }}>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 6 }}>
                 <View>
                   <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: '800', letterSpacing: 2.5, marginBottom: 4 }}>SYSTEM TRAJECTORY</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
@@ -1447,7 +1444,7 @@ export const AtlasScreen: React.FC<AtlasScreenProps> = ({
 
 const styles = StyleSheet.create({
   systemManifestCard: { borderRadius: 16, padding: 20, marginBottom: 12, overflow: 'hidden', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 16 },
-  trendCard: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20, marginBottom: 12, overflow: 'hidden' },
+  trendCard: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 20, marginBottom: 40, overflow: 'hidden' },
   systemManifestPrimaryRow: { flexDirection: 'row', alignItems: 'stretch' },
   systemManifestLeft: { flex: 1, justifyContent: 'center' },
   systemManifestBracketLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 },
@@ -1489,4 +1486,39 @@ const styles = StyleSheet.create({
   summarySuggestionLabel: { color: THEME.border, fontSize: 14, fontWeight: '600', letterSpacing: 1, marginBottom: 14 },
   summarySuggestionBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, alignSelf: 'flex-start' },
   summarySuggestionBtnText: { color: THEME.accent, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
+
+  // Empty State
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: '10%',
+    right: '10%',
+    marginTop: 60, // Push below the center sun
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  emptyStateTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 4,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateBody: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
 });

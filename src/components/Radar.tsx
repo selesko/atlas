@@ -18,9 +18,13 @@ interface RadarProps {
 export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmptyPress }: RadarProps) {
   // Slow continuous rotation
   const spinValue = useRef(new Animated.Value(0)).current;
+  const currentSpinRef = useRef(0);
   const pulseValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    const sub = spinValue.addListener(({ value }) => {
+      currentSpinRef.current = value;
+    });
     Animated.loop(
       Animated.timing(spinValue, {
         toValue: 1,
@@ -36,6 +40,8 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
         Animated.timing(pulseValue, { toValue: 0, duration: 1500, useNativeDriver: true })
       ])
     ).start();
+
+    return () => spinValue.removeListener(sub);
   }, [spinValue, pulseValue]);
 
   const spin = spinValue.interpolate({
@@ -59,56 +65,12 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
     return nodes.flatMap(n => n.goals.flatMap(g => g.actions.map(a => ({ ...a, nodeId: n.id, nodeColor: n.color, __goalId: g.id, __goalName: g.name }))));
   }, [nodes]);
 
-  const handleSvgPress = (e: any) => {
-    const locX = e.nativeEvent.locationX;
-    const locY = e.nativeEvent.locationY;
-    
-    let closestEntity: any = null;
-    let closestDist = 40; // Max click radius (40px)
-    let type: 'coordinate' | 'action' = 'coordinate';
-
-    if (view === 'coordinates') {
-      allGoals.forEach((goal, i) => {
-        const angle = (i / (allGoals.length || 1)) * 2 * Math.PI;
-        const radius = 60 + (i % 3) * 30; 
-        const cx = CENTER + radius * Math.cos(angle);
-        const cy = CENTER + radius * Math.sin(angle);
-        const dist = Math.sqrt(Math.pow(cx - locX, 2) + Math.pow(cy - locY, 2));
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestEntity = goal;
-          type = 'coordinate';
-        }
-      });
-    } else if (view === 'actions') {
-      allActions.forEach((act, i) => {
-        const angle = (i / (allActions.length || 1)) * 2 * Math.PI;
-        const radius = 50 + (i % 4) * 25; 
-        const cx = CENTER + radius * Math.cos(angle);
-        const cy = CENTER + radius * Math.sin(angle);
-        const dist = Math.sqrt(Math.pow(cx - locX, 2) + Math.pow(cy - locY, 2));
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestEntity = act;
-          type = 'action';
-        }
-      });
-    }
-
-    if (closestEntity && onEntityPress) {
-      onEntityPress(type, closestEntity);
-    } else if (onEmptyPress) {
-      onEmptyPress();
-    }
-  };
-
   const centerColor = activeNodeId ? (nodes.find(n => n.id === activeNodeId)?.color || '#FFFFFF') : '#FFFFFF';
 
   return (
     <View style={styles.container}>
       <Animated.View style={{ transform: [{ rotate: spin }] }}>
-        <Svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} onPress={handleSvgPress}>
-          
+        <Svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} onPress={onEmptyPress}>
           {/* Central Origin */}
           <Circle cx={CENTER} cy={CENTER} r={18} fill={centerColor} />
           <Circle cx={CENTER} cy={CENTER} r={28} fill={centerColor} opacity={0.2} />
@@ -120,7 +82,7 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
             const radius = 60 + (i % 3) * 30; 
             const cx = CENTER + radius * Math.cos(angle);
             const cy = CENTER + radius * Math.sin(angle);
-            const cRadius = 4 + (goal.value / 10) * 4; 
+            const cRadius = 6 + (goal.value / 10) * 6; 
             const isActive = !activeNodeId || activeNodeId === goal.nodeId;
             const color = isActive ? goal.nodeColor : theme.divider;
             const opacity = isActive ? 1 : 0.25;
@@ -129,6 +91,13 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
               <G key={goal.id}>
                 <Line x1={CENTER} y1={CENTER} x2={cx} y2={cy} stroke={color} strokeWidth={1} opacity={isActive ? 0.2 : 0.05} />
                 
+                {/* Interaction circle (larger hit area) */}
+                <Circle 
+                  cx={cx} cy={cy} r={25} 
+                  fill="transparent" 
+                  onPress={() => onEntityPress?.('coordinate', goal)} 
+                />
+
                 {/* Real Coordinate Moon */}
                 <Circle cx={cx} cy={cy} r={cRadius} fill={color} opacity={opacity} pointerEvents="none" />
               </G>
@@ -138,7 +107,6 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
           {/* Render All Actions */}
           {view === 'actions' && allActions.map((act, i) => {
             const angle = (i / (allActions.length || 1)) * 2 * Math.PI;
-            // Invert the radius step to make the spiral arms trail the clockwise rotation (galaxy effect)
             const radius = 125 - (i % 4) * 25; 
             const cx = CENTER + radius * Math.cos(angle);
             const cy = CENTER + radius * Math.sin(angle);
@@ -151,14 +119,19 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
 
             return (
               <G key={act.id}>
-                {/* Orbit Path */}
                 <Circle cx={CENTER} cy={CENTER} r={radius} stroke={color} strokeWidth={1} fill="none" opacity={isActive ? 0.15 : 0.05} />
                 
-                {/* Pulsing Aura for active completed actions */}
+                {/* Interaction circle */}
+                <Circle 
+                  cx={cx} cy={cy} r={25} 
+                  fill="transparent" 
+                  onPress={() => onEntityPress?.('action', act)} 
+                />
+
                 {isActive && isCompleted && (
                   <AnimatedCircle 
                     cx={cx} cy={cy} 
-                    r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [3, 10] })} 
+                    r={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [4.5, 15] })} 
                     fill={color} 
                     opacity={pulseValue.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] })} 
                     pointerEvents="none"
@@ -168,7 +141,7 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
                 <Circle 
                   cx={cx} 
                   cy={cy} 
-                  r={isCompleted ? 6 : 4} 
+                  r={isCompleted ? 9 : 6} 
                   fill={fill} 
                   opacity={opacity} 
                   pointerEvents="none"
@@ -176,11 +149,10 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
               </G>
             );
           })}
-
         </Svg>
       </Animated.View>
     </View>
-  );
+);
 }
 
 const styles = StyleSheet.create({

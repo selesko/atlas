@@ -271,19 +271,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
         </GlassCard>
       )}
 
-      {/* Developer Override */}
-      <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
-        <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>DEVELOPER OVERRIDE</Text>
-        <View style={styles.devOverrideRow}>
-          <Text style={[styles.systemAccessTier, { color: theme.textSub }]}>Force hasAccess</Text>
-          <Switch
-            value={devOverride}
-            onValueChange={setDevOverride}
-            trackColor={{ false: '#334155', true: THEME.accent }}
-            thumbColor="#E2E8F0"
-          />
+      {/* Developer Override — only visible in local development */}
+      {__DEV__ && (
+        <View style={[styles.devOverrideSection, { borderColor: theme.divider }]}>
+          <Text style={[styles.devOverrideLabel, { color: theme.textMuted }]}>DEVELOPER OVERRIDE</Text>
+          <View style={styles.devOverrideRow}>
+            <Text style={[styles.systemAccessTier, { color: theme.textSub }]}>Force hasAccess</Text>
+            <Switch
+              value={devOverride}
+              onValueChange={setDevOverride}
+              trackColor={{ false: '#334155', true: THEME.accent }}
+              thumbColor="#E2E8F0"
+            />
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };

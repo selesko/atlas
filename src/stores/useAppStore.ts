@@ -49,7 +49,7 @@ interface AppState {
 
   // Node actions
   updateValue: (nodeId: string, goalId: string, val: number) => void;
-  updateGoal: (nodeId: string, goalId: string, patch: Partial<Pick<Goal, 'name'>>) => void;
+  updateGoal: (nodeId: string, goalId: string, patch: Partial<Pick<Goal, 'name' | 'references'>>) => void;
   addCoordinate: (nodeId: string) => void;
   addNode: (name: string, description: string, color: string, why?: string) => void;
   updateNode: (nodeId: string, patch: Partial<Pick<Node, 'name' | 'description' | 'color' | 'why'>>) => void;

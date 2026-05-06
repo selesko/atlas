@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import Svg, { Circle, Path, G } from 'react-native-svg';
 
-// Arc starts at 12 o'clock (SVG -90°) and sweeps clockwise.
-// value/10 fraction of 360° — fully closed at 10.
+const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 interface OrbitalValueBadgeProps {
   value: number;   // 1–10
@@ -16,20 +16,36 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
   const cy = size / 2;
   const R  = size * 0.41;
 
+  // Animation values
+  const animatedValue = useRef(new Animated.Value(value)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: value,
+      duration: 300,
+      easing: Easing.out(Easing.back(1.5)),
+      useNativeDriver: false,
+    }).start();
+  }, [value]);
+
   const fraction = Math.max(0, Math.min(10, value)) / 10;
   const sweep    = fraction * 360;
   const complete = sweep >= 359.9;
 
-  // Always use node color — works on both dark and light backgrounds
   const activeColor = color;
+  const planetR = size * 0.065;
 
-  // Arc end point (start is always top = (cx, cy - R))
+  // For the arc path, we still use the static value for the path itself to avoid complex path animation,
+  // but the moon will rotate smoothly.
   const endRad = ((-90 + sweep) * Math.PI) / 180;
   const endX   = cx + R * Math.cos(endRad);
   const endY   = cy + R * Math.sin(endRad);
   const largeArc = sweep > 180 ? 1 : 0;
 
-  const planetR = size * 0.065;
+  const spin = animatedValue.interpolate({
+    inputRange: [0, 10],
+    outputRange: ['0deg', '360deg']
+  });
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -44,7 +60,7 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
           opacity={0.15}
         />
 
-        {/* Filled arc — or full circle at 10 */}
+        {/* Filled arc */}
         {complete ? (
           <Circle
             cx={cx} cy={cy} r={R}
@@ -64,9 +80,15 @@ export function OrbitalValueBadge({ value, color, size = 44 }: OrbitalValueBadge
           />
         ) : null}
 
-        {/* Planet dot at arc tip (not shown when complete — orbit ring covers it) */}
+        {/* Animated Moon rotation */}
         {!complete && value > 0 && (
-          <Circle cx={endX} cy={endY} r={planetR} fill={activeColor} />
+          <AnimatedG 
+            style={{ transform: [{ rotate: spin }] }}
+            // @ts-ignore
+            origin={`${cx}, ${cy}`}
+          >
+            <Circle cx={cx} cy={cy - R} r={planetR} fill={activeColor} />
+          </AnimatedG>
         )}
 
       </Svg>

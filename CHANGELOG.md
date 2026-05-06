@@ -2,6 +2,28 @@
 
 ---
 
+## [7dc923b] — 2026-05-05
+
+### Radar Chart — Interaction & Stability
+- **Native Hit-Testing:** Replaced manual coordinate math with native SVG `onPress` events. Hit detection is now 100% accurate for all Nodes, Coordinates, and Actions, regardless of rotation angle.
+- **Transform Re-engineering:** Shifted orbital rotation from internal SVG groups to the parent `Animated.View`. This ensures perfect center-axis alignment and eliminates visual "wobble" or clipping.
+- **Hit-Target Expansion:** Added invisible 25px/40px touch-target buffers to every orbital entity, ensuring reliable interaction on mobile devices.
+
+### UI / UX Polish — High Fidelity
+- **Trajectory Modal:** Redesigned from a bottom-sheet into a centered, floating focal card. Features 24px rounded corners, boxed border framing, and removal of the legacy drag handle for a cleaner "Mission Control" aesthetic.
+- **Copilot Card:** Redesigned the AI insight area with a "Briefing Box" aesthetic. Applied premium italicized typography and glassmorphic blur to differentiate AI guidance from core system data.
+- **Tab Navigation:** Replaced joined segment controls with distinct, pill-styled buttons. Improved visual separation and touch-target clarity for "Coordinates vs Actions" and "Evaluate vs Actions" tabs.
+
+### Behavioral Grounding — Workflow Cleanup
+- **Streamlined Evaluators:** Removed redundant "+ ADD ACTION" and "Go to Actions" buttons from coordinate cards. The system now enforces a clearer separation: Evaluate for grounding, Actions for execution.
+- **Editable Desired Intent:** Enclosed the Node Intent description in a boxed, editable field within both the expanded Node view and the Coordinate edit modal. This allows for real-time strategy adjustment during calibration.
+
+### Bug Fixes
+- Fixed `ReferenceError` in `NodesScreen.tsx` by importing the missing `TextInput` component.
+- Fixed `SyntaxError` in `Radar.tsx` caused by a duplicate variable declaration during the animation refactor.
+
+---
+
 ## [fb4b1e2] — 2026-05-04
 
 ### Atlas Page — In-Card Editing (no navigation away)

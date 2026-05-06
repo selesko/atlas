@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, PanResponder, Dimensions, TextInput } from 'react-native';
 import { OrbitalValueBadge } from '../components/OrbitalValueBadge';
 import { GlassCard } from '../components/GlassCard';
 import { useAppStore } from '../stores/useAppStore';
@@ -139,12 +139,17 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
               <View style={[styles.divider, { backgroundColor: theme.divider }]} />
 
 
-              {node.description ? (
-                <>
-                  <Text style={[styles.coordinatesLabel, { color: theme.textMuted }]}>DESIRED INTENT</Text>
-                  <Text style={[styles.nodeDescriptionText, { color: theme.text }]}>{node.description}</Text>
-                </>
-              ) : null}
+              <Text style={[styles.coordinatesLabel, { color: theme.textMuted }]}>DESIRED INTENT</Text>
+              <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginBottom: 20 }}>
+                <TextInput
+                  style={[styles.nodeDescriptionText, { color: theme.text, marginBottom: 0 }]}
+                  value={node.description}
+                  onChangeText={(text) => updateNode(node.id, { description: text })}
+                  multiline
+                  placeholder="Define your desired intent..."
+                  placeholderTextColor={theme.textMuted}
+                />
+              </View>
               <Text style={[styles.coordinatesLabel, { color: theme.textMuted }]}>ACTIVE COORDINATE</Text>
               {node.goals.filter(g => !g.archived).map(goal => {
                 const key = `${node.id}-${goal.id}`;
@@ -267,7 +272,5 @@ const styles = StyleSheet.create({
   addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
   addCoordinateText: { fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   intentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 20 },
-  intentPrefix: { fontSize: 12, fontWeight: '700', marginTop: 1, flexShrink: 0 },
-  intentText: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 19, fontStyle: 'italic' },
   intentLoading: { flex: 1, fontSize: 12, fontWeight: '600', letterSpacing: 2, fontStyle: 'italic' },
 });

@@ -22,6 +22,7 @@ export interface Goal {
   actions: Action[];
   scoreHistory?: Array<{ date: string; value: number }>;
   archived?: boolean;
+  references?: Record<number, string>;
 }
 
 export interface Node {

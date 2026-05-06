@@ -471,6 +471,7 @@ export default function App() {
               onAction={handleCopilotAction}
               onGoToNode={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Evaluate'); }}
               onGoToActions={(nodeId) => { setSelectedNodeId(nodeId); setActiveTab('Actions'); }}
+              onGoToEvaluate={() => setActiveTab('Evaluate')}
               onOpenCoordinate={(nodeId, goalId) => setEditingCoordinate({ nodeId, goalId })}
               onOpenAction={(nodeId, goalId, actionId) => {
                 const node = nodes.find(n => n.id === nodeId);
@@ -660,18 +661,18 @@ export default function App() {
                 {/* Archive / Delete */}
                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
                   <TouchableOpacity
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(251,191,36,0.4)', alignItems: 'center' }}
+                    style={styles.subtleArchiveBtn}
                     onPress={() => { if (editingNodeId) { archiveNode(editingNodeId); setEditingNodeId(null); } }}
                     activeOpacity={0.7}
                   >
-                    <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>ARCHIVE</Text>
+                    <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(251,113,133,0.4)', alignItems: 'center' }}
+                    style={styles.subtleDeleteBtn}
                     onPress={() => { if (editingNodeId) { deleteNode(editingNodeId); setEditingNodeId(null); } }}
                     activeOpacity={0.7}
                   >
-                    <Text style={{ color: '#fb7185', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>DELETE</Text>
+                    <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.actionRow}>
@@ -728,54 +729,68 @@ export default function App() {
                   </View>
                   <OrbitalValueBadge value={goal.value} color={node.color} size={48} />
                 </View>
-                <Text style={styles.calibrationFeedLabel}>CALIBRATIONS</Text>
-                {goal.actions.length === 0 ? (
-                  <Text style={[styles.evidencePreview, { marginBottom: 8 }]}>No actions yet</Text>
-                ) : (
-                  goal.actions.map(a => (
-                    <TouchableOpacity
-                      key={a.id}
-                      style={styles.coordEditTaskRow}
-                      onPress={() => {
-                        setEditForm({ title: a.title, nodeId: node.id, goalId: goal.id, isPriority: !!a.isPriority, notes: a.notes || '', dueDate: a.dueDate || '', reminder: a.reminder || '' });
-                        setEditFormEffort(a.effort ?? 'easy');
-                        setEditingAction({ nodeId: node.id, goalId: goal.id, actionId: a.id });
-                        setEditingCoordinate(null);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <TouchableOpacity onPress={() => toggleAction(node.id, goal.id, a.id)} style={{ padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Svg width={20} height={20} viewBox="0 0 24 24">
-                          {a.completed ? (
-                            <><Circle cx="12" cy="12" r="10" fill={node.color} /><Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" /></>
-                          ) : (
-                            <Circle cx="12" cy="12" r="10" fill="none" stroke={THEME.textDim} strokeWidth="1.5" />
-                          )}
-                        </Svg>
-                      </TouchableOpacity>
-                      <Text style={[styles.coordEditTaskTitle, a.completed && styles.taskTitleStrike, a.completed && { opacity: 0.8 }]} numberOfLines={1}>{a.title}</Text>
-                    </TouchableOpacity>
-                  ))
-                )}
+
+                {/* Desired Intent (Editable box) */}
+                <Text style={[styles.calibrationFeedLabel, { marginTop: 10, marginBottom: 8 }]}>DESIRED INTENT</Text>
+                <View style={[styles.groundingPreview, { backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginBottom: 20 }]}>
+                  <TextInput
+                    style={[styles.groundingPreviewText, { color: theme.text, fontSize: 14, minHeight: 40 }]}
+                    value={node.description}
+                    onChangeText={(text) => updateNode(node.id, { description: text })}
+                    placeholder="Define your desired intent..."
+                    placeholderTextColor={THEME.textDim}
+                    multiline
+                  />
+                </View>
+
+                {/* Grounding Reference Text (Instant display) */}
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[styles.groundingPreviewText, { color: node.color, fontSize: 11, fontWeight: '700', letterSpacing: 1 }]}>
+                    CURRENT GROUNDING: {goal.value <= 4 ? (goal.references?.[3] || 'LEVEL 3: NEGLECT') :
+                     goal.value >= 8 ? (goal.references?.[9] || 'LEVEL 9: PEAK') :
+                     (goal.references?.[6] || 'LEVEL 6: BASELINE')}
+                  </Text>
+                </View>
+
+                <View style={styles.addNodeDivider} />
+
+                <Text style={styles.calibrationFeedLabel}>REFERENCE POINTS</Text>
+                <View style={styles.referenceContainer}>
+                  {[3, 6, 9].map((lvl) => (
+                    <View key={lvl} style={styles.referenceField}>
+                      <View style={styles.referenceLabelRow}>
+                        <Text style={[styles.referenceLvl, { color: node.color }]}>LVL {lvl}</Text>
+                        <Text style={styles.referenceAnchorLabel}>
+                          {lvl === 3 ? 'NEGLECT' : lvl === 6 ? 'BASELINE' : 'PEAK'}
+                        </Text>
+                      </View>
+                      <TextInput
+                        style={styles.referenceInput}
+                        value={goal.references?.[lvl] || ''}
+                        onChangeText={(text) => {
+                          const newRefs = { ...(goal.references || {}), [lvl]: text };
+                          updateGoal(node.id, goal.id, { references: newRefs });
+                        }}
+                        placeholder={`What does a ${lvl} look like for ${goal.name}?`}
+                        placeholderTextColor={THEME.textDim}
+                        multiline
+                      />
+                    </View>
+                  ))}
+                </View>
+
+                <View style={{ height: 20 }} />
               </ScrollView>
               {/* Bottom action row */}
               <View style={{ marginTop: 12 }}>
-                {/* + ADD ACTION — prominent */}
-                <TouchableOpacity
-                  style={{ paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: node.color + '66', backgroundColor: node.color + '18', alignItems: 'center', marginBottom: 10 }}
-                  onPress={() => useAppStore.getState().addAction(node.id, goal.id, 'New Action')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ color: node.color, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>+ ADD ACTION</Text>
-                </TouchableOpacity>
                 {/* Archive / Delete / Done — small and muted */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flexDirection: 'row', gap: 16 }}>
-                    <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} activeOpacity={0.6}>
-                      <Text style={{ color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>ARCHIVE</Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
+                      <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { if (editingCoordinate) { deleteGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} activeOpacity={0.6}>
-                      <Text style={{ color: '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, opacity: 0.6 }}>DELETE</Text>
+                    <TouchableOpacity onPress={() => { if (editingCoordinate) { deleteGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
+                      <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
                     </TouchableOpacity>
                   </View>
                   <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
@@ -1224,4 +1239,64 @@ const styles = StyleSheet.create({
   authSubmitText: { color: THEME.accent, fontSize: 14, fontWeight: '800', letterSpacing: 2 },
   authToggleBtn: { marginTop: 16, alignItems: 'center', paddingVertical: 8 },
   authToggleText: { color: THEME.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+
+  // Grounding Mechanism
+  groundingPreview: {
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: 'rgba(255,255,255,0.1)',
+  },
+  groundingPreviewText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  groundingHint: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 4,
+    letterSpacing: 1,
+  },
+  referenceContainer: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  referenceField: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 8,
+    padding: 12,
+  },
+  referenceLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  referenceLvl: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  referenceAnchorLabel: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  referenceInput: {
+    color: 'white',
+    fontSize: 13,
+    lineHeight: 18,
+    padding: 0,
+  },
+  subtleArchiveBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  subtleArchiveBtnText: { color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  subtleDeleteBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(239,68,68,0.1)' },
+  subtleDeleteBtnText: { color: 'rgba(239,68,68,0.4)', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
 });

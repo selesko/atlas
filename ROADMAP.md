@@ -129,15 +129,11 @@ Completely overhauled Radar chart interaction. Removed manual coordinate math an
 ### ~~7. Radar coordinate overflow~~ ✅ Fixed 2026-05-05
 Coordinates are now distributed with native hit-target expansion (25px invisible circles) and the layout has been cleaned up to prevent visual stacking.
 
-### 8. `TasksScreen.tsx` shim is dead code
-`src/screens/TasksScreen.tsx` is a one-line re-export shim from the Tasks → Actions rename. No component imports it.
-- **Fix:** Delete `TasksScreen.tsx`.
-- **File:** `src/screens/TasksScreen.tsx`
+### ~~8. `TasksScreen.tsx` shim is dead code~~ ✅ Fixed 2026-05-04
+Deleted. Was a one-line re-export shim from the Tasks → Actions rename. Nothing imported it.
 
-### 9. `README_PRODUCTION.md` references old Atlas naming
-The production README uses `atlas-ai` as the edge function URL and references "Atlas" throughout.
-- **Fix:** Update to Calibra branding and `calibra-ai`.
-- **File:** `README_PRODUCTION.md`
+### ~~9. `README_PRODUCTION.md` references old Atlas naming~~ ✅ Fixed 2026-05-04
+Rewritten from scratch. Documents current schema, `calibra-ai` edge function, sync model, auth approach, and security checklist.
 
 ### 10. Empty state is undesigned — blank Evaluate screen with no nodes
 A new user who gets past onboarding without adding nodes sees an empty constellation and a copilot that says "No areas added yet." There's no prompt, no example, no next step.

@@ -1,100 +1,96 @@
-# Atlas — Production Readiness
+# Calibra — Production Architecture
 
-This document outlines the plan to move Atlas from local storage to a structured, multi-user backend and to keep API keys and secrets **only** on the server.
+This document describes the production backend architecture: database schema, AI bridge, and security model.
 
 ---
 
-## 1. Database
-
-### Schema
-
-- **`schema/schema.sql`** — DDL for `profiles` and `evidence_logs`.
-- **`schema/types.ts`** — TypeScript types for rows, inserts, and filters.
+## 1. Database (Supabase)
 
 ### Tables
 
-| Table           | Purpose                                                                 |
-|----------------|-------------------------------------------------------------------------|
-| **profiles**   | User Manifest: `cognitive_model`, `peak_period`, `motivators`, `identity_notes`. One row per `user_id`. |
-| **evidence_logs** | Mind/Body/Home scores and "why" statements. One row per calibration event; each row is tied to `user_id`. |
+| Table | Purpose |
+|-------|---------|
+| **profiles** | One row per user. Stores `cognitive_model`, `motivator_choices`, `identity_notes`, `persona`, `has_completed_onboarding`. |
+| **nodes** | Life domains (e.g. Mind, Body, Work). Scoped to `user_id`. |
+| **coordinates** | Measurable dimensions within a node. Stores `value`, `score_history`, `description`. |
+| **actions** | Concrete habits and tasks linked to a coordinate. Stores `title`, `effort`, `completed`, `archived`, `is_priority`. |
+| **subscriptions** | Access tier per user (`free` / `pro`). Controls copilot and sync features. |
 
-### Multi-User
+### Security
 
-- Every `evidence_log` has a **`user_id`**.
-- `profiles.user_id` is UNIQUE; one profile per user.
-- All queries must be scoped by `user_id` (enforced via RLS in production).
+- All tables have **Row Level Security (RLS)** enabled.
+- Every row is scoped to `auth.users(id)` — users can only read and write their own data.
+- Foreign keys use `ON DELETE CASCADE` — deleting a user removes all their data cleanly.
+- Schema lives at `schema/schema.sql`.
 
-### Deployment
+### Sync Model
 
-- Run `schema/schema.sql` in your Postgres (e.g. Supabase SQL editor).
-- Enable Row Level Security (RLS) and add policies so users can only read/write their own `profiles` and `evidence_logs` (see commented section in `schema.sql`).
-
----
-
-## 2. AI Bridge (No API Keys in the Client)
-
-### Problem
-
-- Calling OpenAI (or similar) directly from the app would require embedding an API key in the client.
-- Keys in client bundles can be extracted and abused.
-
-### Approach: Edge Function
-
-- **Do not** call OpenAI from the app.
-- The app calls our **Edge Function** (e.g. Supabase Edge Function) over HTTPS.
-- The Edge Function holds the API key in **server-side** environment variables and forwards requests to OpenAI.
-
-### Implementation
-
-- **`services/productionAiService.ts`** — Client-side module that:
-  - Sends `{ action, payload, context? }` to a **remote URL** (your Edge Function).
-  - Does **not** contain or receive any API keys.
-
-### Edge Function (Your Backend)
-
-- **URL**: e.g. `https://<project>.supabase.co/functions/v1/atlas-ai`
-- **Env (server-only)**: `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`, etc.)
-- **Responsibilities**:
-  - Validate `action` and `payload`.
-  - Optionally verify the request (JWT, Supabase `Authorization: Bearer`).
-  - Call OpenAI (or other provider) with the key from env.
-  - Return `{ ok, text?, error?, usage? }`.
-
-### Config in the App
-
-- Set the Edge Function base URL via:
-  - **`EXPO_PUBLIC_ATLAS_AI_URL`** (or your chosen env), or
-  - App config / `Constants.expoConfig.extra`.
-- The app must **never** receive or store `OPENAI_API_KEY` or similar.
+- All writes are **fire-and-forget** via `swallow()` in `src/services/sync.ts`.
+- Zustand (`useAppStore`) is the single source of truth for local state.
+- On sign-in, `fetchUserData()` hydrates the store from Supabase.
+- Offline-first: the app reads from AsyncStorage and syncs when a connection is available.
 
 ---
 
-## 3. Moving API Keys Server-Side — Checklist
+## 2. AI Bridge (`calibra-ai` Edge Function)
 
-| Step | Action |
+### Why an Edge Function
+
+Calling an AI provider directly from the app would require embedding an API key in the client bundle, where it can be extracted. All AI calls go through a Supabase Edge Function instead.
+
+### Edge Function
+
+- **URL**: `https://<project>.supabase.co/functions/v1/calibra-ai`
+- **Location**: `supabase/functions/calibra-ai/`
+- **Env (server-only)**: AI provider API key stored in Supabase secrets — never in the client.
+
+### Actions the Edge Function Handles
+
+| Action | Trigger | Returns |
+|--------|---------|---------|
+| `briefing` | Atlas / Profile tab copilot open | Reflection lines + two action suggestions |
+| `nodeDiagnostic` | Evaluate tab copilot open | Node-specific insight + two action suggestions |
+| `taskDispatch` | Actions tab copilot open | Prioritisation signal + two action suggestions |
+| `nodeIntent` | Node expanded in Evaluate screen | Single orientation line for that node |
+
+### Client-Side
+
+- `src/services/aiService.ts` — calls `supabase.functions.invoke('calibra-ai', { body })`.
+- The client sends `{ action, persona, cognitiveModel, nodes }` — no API keys, no secrets.
+- Responses are typed as `CopilotPayload` (`header`, `stats`, `lines`, `actions`).
+- Results are cached per session to avoid redundant calls.
+
+---
+
+## 3. Auth
+
+- Supabase email/password auth via `@supabase/supabase-js`.
+- Session persisted via `@react-native-async-storage/async-storage`.
+- Auth is **optional** — users can use the app without signing in. Sign-in enables cross-device sync.
+- The Edge Function validates the incoming `Authorization: Bearer <token>` before processing AI requests.
+
+---
+
+## 4. Security Checklist
+
+| Item | Status |
 |------|--------|
-| 1 | Create an Edge Function (Supabase, Vercel, etc.) that accepts POST `{ action, payload, context? }`. |
-| 2 | Add `OPENAI_API_KEY` (or equivalent) to the **Edge Function’s** environment only. |
-| 3 | In the Edge Function, call OpenAI with that key and return `{ ok, text?, error?, usage? }`. |
-| 4 | In the app, set `EXPO_PUBLIC_ATLAS_AI_URL` (or your variable) to the Edge Function URL. |
-| 5 | Ensure no `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or similar appears in `App.tsx`, `app.config.js`, or any client bundle. |
-| 6 | Use `productionAiService.callProductionAi()` (and helpers like `reflectWithAi`, `suggestWithAi`) for all AI calls. |
+| RLS enabled on all tables | ✅ |
+| AI API key server-side only (Edge Function env) | ✅ |
+| No secrets in `App.tsx`, `app.config.js`, or client bundle | ✅ |
+| `devOverride` flag guarded behind `__DEV__` | ⚠️ Pending — see ROADMAP.md item 5 |
+| Privacy manifest (`NSPrivacyAccessedAPITypes`) declared | ✅ |
 
 ---
 
-## 4. Security Summary
-
-- **Database**: `user_id` on all logs; RLS so users only access their own data.
-- **AI**: Keys only in the Edge Function env; client talks to our URL, not to OpenAI.
-- **Auth**: Edge Function should verify the incoming `Authorization` (e.g. Supabase JWT) before calling external APIs.
-
----
-
-## 5. Files Added / Modified
+## 5. Key Files
 
 | Path | Role |
 |------|------|
-| `schema/schema.sql` | DDL for `profiles`, `evidence_logs`; RLS comments. |
-| `schema/types.ts` | TS types for DB rows and inserts. |
-| `services/productionAiService.ts` | Client AI bridge; calls remote Edge Function only. |
-| `README_PRODUCTION.md` | This plan and checklist. |
+| `src/services/sync.ts` | All Supabase read/write — `fetchUserData`, `upsertProfile`, `upsertNode`, `upsertAction`, etc. |
+| `src/services/aiService.ts` | Copilot fetch + TAB_CONFIG + TAB_ACTION mapping |
+| `src/stores/useAppStore.ts` | Zustand store — single source of truth for all app state |
+| `supabase/functions/calibra-ai/` | Edge Function — AI prompt logic, persona branching |
+| `schema/schema.sql` | Full DDL with RLS policies |
+| `eas.json` | EAS build profiles (`development`, `preview`, `production`) |
+| `app.config.js` | Expo config — bundle ID, privacy manifest, EAS project ID |

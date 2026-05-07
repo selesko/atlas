@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Calibra — Know yourself. Move with intention. A personal performance app for tracking your life coordinates and taking action."/>
+  <title>Calibra — Know Yourself</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      background: #08080F;
+      color: #c8c8d8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      background: rgba(8,8,15,0.85);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .nav-logo-mark { width: 32px; height: 32px; }
+    .nav-logo-name {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #fff;
+    }
+    nav a.nav-link {
+      font-size: 13px;
+      color: #666;
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      transition: color 0.2s;
+    }
+    nav a.nav-link:hover { color: #c8c8d8; }
+
+    /* ─── HERO ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .hero-glow {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px;
+      height: 700px;
+      background: radial-gradient(circle, rgba(124,106,247,0.12) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+    .hero-orb {
+      margin-bottom: 52px;
+    }
+    .hero-eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: #7C6AF7;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: clamp(38px, 6vw, 68px);
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      max-width: 700px;
+    }
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, #7C6AF7 0%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 18px;
+      color: #7070a0;
+      max-width: 480px;
+      line-height: 1.65;
+      margin-bottom: 48px;
+    }
+    .cta-group {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #7C6AF7;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 14px 28px;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-primary:hover { background: #6a59e0; transform: translateY(-1px); }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      font-size: 14px;
+      color: #666;
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      transition: color 0.2s;
+    }
+    .btn-secondary:hover { color: #c8c8d8; }
+    .coming-soon {
+      font-size: 11px;
+      color: #444;
+      letter-spacing: 0.1em;
+      margin-top: 20px;
+      text-transform: uppercase;
+    }
+
+    /* ─── FEATURES ─── */
+    .features {
+      padding: 100px 24px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .section-label {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: #7C6AF7;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      text-align: center;
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+      margin-bottom: 64px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 32px;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: rgba(124,106,247,0.3); }
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 20px;
+      display: block;
+    }
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.01em;
+      margin-bottom: 10px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: #606080;
+      line-height: 1.65;
+    }
+
+    /* ─── PRINCIPLES ─── */
+    .principles {
+      padding: 80px 24px;
+      background: rgba(124,106,247,0.04);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .principles-inner {
+      max-width: 680px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .principles-inner h2 {
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .principles-inner p {
+      font-size: 16px;
+      color: #606080;
+      line-height: 1.75;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      padding: 48px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    footer .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    footer .footer-logo span {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #fff;
+    }
+    .footer-links {
+      display: flex;
+      gap: 28px;
+    }
+    .footer-links a {
+      font-size: 13px;
+      color: #444;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: #c8c8d8; }
+    .footer-copy {
+      font-size: 13px;
+      color: #333;
+    }
+
+    @media (max-width: 600px) {
+      nav { padding: 16px 20px; }
+      .hero { padding: 100px 20px 60px; }
+      footer { padding: 40px 20px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-logo">
+    <svg class="nav-logo-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="12" stroke="#7C6AF7" stroke-width="1.2" opacity="0.9"/>
+      <circle cx="16" cy="16" r="7.5" fill="#7C6AF7" opacity="0.2"/>
+      <circle cx="16" cy="16" r="5" fill="white"/>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 16 16" to="360 16 16" dur="7s" repeatCount="indefinite"/>
+        <circle cx="28" cy="16" r="2.2" fill="white"/>
+      </g>
+    </svg>
+    <span class="nav-logo-name">CALIBRA</span>
+  </a>
+  <a href="/privacy/" class="nav-link">Privacy</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"><div class="hero-glow"></div></div>
+
+  <div class="hero-orb">
+    <svg width="88" height="88" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="44" cy="44" r="34" stroke="#7C6AF7" stroke-width="1.5" opacity="0.6"/>
+      <circle cx="44" cy="44" r="24" stroke="#7C6AF7" stroke-width="0.8" opacity="0.3"/>
+      <circle cx="44" cy="44" r="20" fill="#7C6AF7" opacity="0.15"/>
+      <circle cx="44" cy="44" r="13" fill="#7C6AF7" opacity="0.3"/>
+      <circle cx="44" cy="44" r="8" fill="white"/>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 44 44" to="360 44 44" dur="8s" repeatCount="indefinite"/>
+        <circle cx="78" cy="44" r="5" fill="white" opacity="0.9"/>
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="120 44 44" to="480 44 44" dur="14s" repeatCount="indefinite"/>
+        <circle cx="78" cy="44" r="3" fill="#7C6AF7" opacity="0.7"/>
+      </g>
+    </svg>
+  </div>
+
+  <p class="hero-eyebrow">Personal Performance</p>
+  <h1>Know yourself.<br/><em>Move with intention.</em></h1>
+  <p class="hero-sub">Calibra helps you track the dimensions of your life, evaluate where you stand, and take meaningful action — every day.</p>
+
+  <div class="cta-group">
+    <a href="#" class="btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      Download on the App Store
+    </a>
+  </div>
+  <p class="coming-soon">Coming soon to iOS</p>
+</section>
+
+<!-- FEATURES -->
+<section class="features">
+  <p class="section-label">How it works</p>
+  <h2 class="section-title">Your life, structured.</h2>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <span class="feature-icon">◉</span>
+      <h3>Nodes</h3>
+      <p>Define the domains that matter to you — Mind, Body, Work, Relationships. Your life, your architecture.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">◈</span>
+      <h3>Coordinates</h3>
+      <p>Within each node, track measurable dimensions. Score them over time. Watch the trajectory emerge.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">▸</span>
+      <h3>Actions</h3>
+      <p>Concrete things you do to move a coordinate. No vague intentions — just clear next steps with effort ratings.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">✦</span>
+      <h3>AI Copilot</h3>
+      <p>An AI briefing that reads your current state and surfaces what to focus on — tailored to how you think.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">◎</span>
+      <h3>Evaluate</h3>
+      <p>A dedicated space to take stock. Not a productivity dashboard — a mirror. See yourself clearly.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">↗</span>
+      <h3>Trajectory</h3>
+      <p>Your overall score over time, rendered as a stock chart. Progress is evidence. Evidence compounds.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRINCIPLES -->
+<section class="principles">
+  <div class="principles-inner">
+    <p class="section-label" style="text-align:center">Philosophy</p>
+    <h2>Built for people who take themselves seriously.</h2>
+    <p>Calibra isn't a habit tracker or a to-do list. It's a system for understanding where you actually are — not where you think you should be. No gamification, no streaks, no noise. Just clarity, structured into action.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">
+    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="12" stroke="#7C6AF7" stroke-width="1.2" opacity="0.7"/>
+      <circle cx="16" cy="16" r="5" fill="white"/>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" from="0 16 16" to="360 16 16" dur="7s" repeatCount="indefinite"/>
+        <circle cx="28" cy="16" r="2.2" fill="white" opacity="0.7"/>
+      </g>
+    </svg>
+    <span>CALIBRA</span>
+  </div>
+  <div class="footer-links">
+    <a href="/privacy/">Privacy Policy</a>
+    <a href="mailto:privacy@usecalibra.com">Contact</a>
+  </div>
+  <span class="footer-copy">&copy; 2026 Calibra. All rights reserved.</span>
+</footer>
+
+</body>
+</html>

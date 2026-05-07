@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Privacy Policy — Calibra</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body {
+      background: #08080F;
+      color: #c8c8d8;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.75;
+      padding: 0 20px 80px;
+    }
+    .wrap { max-width: 680px; margin: 0 auto; }
+    header {
+      padding: 56px 0 40px;
+      border-bottom: 1px solid #1e1e2e;
+      margin-bottom: 48px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .logo-mark {
+      width: 42px; height: 42px;
+    }
+    .logo-name {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: #fff;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.01em;
+      margin-bottom: 8px;
+    }
+    .updated {
+      font-size: 13px;
+      color: #666;
+      letter-spacing: 0.04em;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin: 40px 0 12px;
+    }
+    p { margin-bottom: 16px; color: #b0b0c8; }
+    ul { margin: 0 0 16px 20px; color: #b0b0c8; }
+    li { margin-bottom: 8px; }
+    a { color: #7C6AF7; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .callout {
+      background: #0f0f20;
+      border: 1px solid #1e1e38;
+      border-left: 3px solid #7C6AF7;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 24px 0;
+      font-size: 14px;
+      color: #9090b8;
+    }
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid #1e1e2e;
+      font-size: 13px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a href="/" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#555;text-decoration:none;margin-bottom:32px;letter-spacing:0.04em;" onmouseover="this.style.color='#c8c8d8'" onmouseout="this.style.color='#555'">← Back to Calibra</a>
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- orbit ring -->
+        <circle cx="21" cy="21" r="16" stroke="#7C6AF7" stroke-width="1.5" opacity="0.9"/>
+        <!-- sun glow -->
+        <circle cx="21" cy="21" r="10" fill="#7C6AF7" opacity="0.25"/>
+        <!-- sun core -->
+        <circle cx="21" cy="21" r="6.5" fill="white"/>
+        <!-- planet orbiting the sun -->
+        <g>
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from="0 21 21"
+            to="360 21 21"
+            dur="7s"
+            repeatCount="indefinite"/>
+          <circle cx="37" cy="21" r="3" fill="white"/>
+        </g>
+      </svg>
+      <span class="logo-name">CALIBRA</span>
+    </div>
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: April 26, 2026</p>
+  </header>
+
+  <p>Calibra ("we," "us," or "our") is a personal performance tracking app. This policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+
+  <div class="callout">
+    The short version: Calibra collects only what it needs to function. We do not sell your data. We do not run ads. Your personal content stays yours.
+  </div>
+
+  <h2>Information We Collect</h2>
+  <p>We collect the following categories of information when you use Calibra:</p>
+  <ul>
+    <li><strong>Account information</strong> — your email address, used to create and authenticate your account.</li>
+    <li><strong>User-generated content</strong> — the nodes, coordinates, scores, evidence notes, and tasks you create inside the app.</li>
+    <li><strong>Profile preferences</strong> — your cognitive model, peak period, motivators, and identity notes.</li>
+    <li><strong>Usage data</strong> — basic anonymous analytics such as app version and crash reports, collected only to improve stability.</li>
+  </ul>
+  <p>We do not collect your name, phone number, location, contacts, camera, or any sensitive personal information.</p>
+
+  <h2>How We Use Your Information</h2>
+  <ul>
+    <li>To provide, sync, and back up your Calibra data across devices.</li>
+    <li>To authenticate your account securely.</li>
+    <li>To generate AI-powered briefings personalized to your data (see AI section below).</li>
+    <li>To communicate with you about your account when necessary.</li>
+  </ul>
+  <p>We do not use your data for advertising, profiling, or sale to third parties.</p>
+
+  <h2>AI Features</h2>
+  <p>Calibra uses an AI co-pilot feature powered by Anthropic's Claude API. When you open the co-pilot, a summary of your nodes, scores, and profile preferences is sent to Anthropic's servers to generate a personalized briefing. This data is used solely to produce the response and is subject to <a href="https://www.anthropic.com/privacy" target="_blank">Anthropic's privacy policy</a>.</p>
+  <p>We do not send your raw task content or evidence notes to the AI — only high-level node names, scores, and profile settings.</p>
+
+  <h2>Data Storage</h2>
+  <p>Your data is stored securely on servers provided by Supabase, Inc., a cloud database platform. Data is encrypted in transit (TLS) and at rest. Supabase's infrastructure is hosted on AWS. For more information, see <a href="https://supabase.com/privacy" target="_blank">Supabase's privacy policy</a>.</p>
+  <p>If you use Calibra without creating an account, your data is stored locally on your device only and is not transmitted to our servers.</p>
+
+  <h2>Data Retention</h2>
+  <p>We retain your data for as long as your account is active. If you delete your account, all associated data is permanently deleted from our servers within 30 days.</p>
+
+  <h2>Your Rights</h2>
+  <p>You have the right to:</p>
+  <ul>
+    <li><strong>Access</strong> — request a copy of the data we hold about you.</li>
+    <li><strong>Correction</strong> — update or correct inaccurate data.</li>
+    <li><strong>Deletion</strong> — request that we delete your account and all associated data.</li>
+    <li><strong>Portability</strong> — request your data in a machine-readable format.</li>
+  </ul>
+  <p>To exercise any of these rights, contact us at <a href="mailto:privacy@usecalibra.com">privacy@usecalibra.com</a>.</p>
+
+  <h2>Children's Privacy</h2>
+  <p>Calibra is not directed at children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe we have inadvertently collected such information, please contact us and we will delete it promptly.</p>
+
+  <h2>Changes to This Policy</h2>
+  <p>We may update this policy from time to time. When we do, we will update the "last updated" date at the top. Continued use of Calibra after changes constitutes acceptance of the updated policy.</p>
+
+  <h2>Contact</h2>
+  <p>For questions or concerns about this policy, reach us at <a href="mailto:privacy@usecalibra.com">privacy@usecalibra.com</a> or visit <a href="/">usecalibra.com</a>.</p>
+
+  <footer>
+    &copy; 2026 Calibra. All rights reserved.
+  </footer>
+</div>
+</body>
+</html>

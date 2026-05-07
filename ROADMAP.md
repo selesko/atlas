@@ -4,6 +4,27 @@ Last updated: 2026-05-04. This document is the canonical reference for what's do
 
 ---
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Framework** | React Native + Expo SDK 54 |
+| **Language** | TypeScript |
+| **State management** | Zustand with `persist` middleware |
+| **Local persistence** | AsyncStorage (offline-first) |
+| **Backend / Auth** | Supabase (PostgreSQL + Row Level Security) |
+| **AI** | Supabase Edge Functions (Deno runtime) → `calibra-ai` |
+| **Build system** | EAS (Expo Application Services) |
+| **SVG / Charts** | react-native-svg |
+| **Blur / Glass UI** | expo-blur |
+| **Haptics** | expo-haptics |
+| **Animation** | React Native `Animated` API + `Easing` |
+| **Navigation** | Custom tab bar (no React Navigation dependency) |
+| **Hosting** | Vercel (usecalibra.com + privacy policy) |
+| **Version control** | Git / GitHub (`selesko/atlas`) |
+
+---
+
 ## Status: Pre-Submission Sprint
 
 The core product is functionally complete. The remaining work is submission infrastructure, a handful of data integrity fixes, and App Store Connect setup.
@@ -139,6 +160,69 @@ Rewritten from scratch. Documents current schema, `calibra-ai` edge function, sy
 A new user who gets past onboarding without adding nodes sees an empty constellation and a copilot that says "No areas added yet." There's no prompt, no example, no next step.
 - **Fix:** Add an empty state to the Atlas and Evaluate screens — a ghost constellation with one CTA: "Add your first node." Consider pre-populating one example node (Mind / Body / Work) that the user can rename or delete.
 - **Files:** `AtlasScreen.tsx`, `src/screens/NodesScreen.tsx`
+
+---
+
+## 🌐 Website Status
+
+**usecalibra.com is currently unreachable (HTTP 000 — no response).**
+
+This is a submission blocker. Apple requires a working privacy policy URL before it will accept an app for review. The URL `https://usecalibra.com/privacy` is listed in the roadmap as a required App Store Connect field.
+
+| Page | Required | Status |
+|------|----------|--------|
+| `usecalibra.com` | Recommended | ❌ Down |
+| `usecalibra.com/privacy` | **Required for App Store** | ❌ Unreachable |
+
+**Fix:** Check Vercel dashboard — the deployment may have expired, the domain DNS may have drifted, or the project may need to be redeployed. This must be live before submitting to App Store review.
+
+---
+
+## 📋 Before You Go to Market (Non-App Hurdles)
+
+Everything below is outside the codebase but required or strongly recommended before launch. None of it requires you to be a business — you can ship as an individual developer on the App Store. Here's what that actually means in practice.
+
+### Do you need to form a business?
+
+**No — not for v1.0.** Apple accepts individual developers. You submit under your legal name. Your name (or a DBA) appears on the App Store listing under "Developer." You can always transfer the app to a company entity later.
+
+**However**, if you're charging money or expect meaningful revenue, an LLC is worth considering. It costs $50–$500 depending on the state, takes a few days, and separates your personal finances from the app's. It's not urgent for launch but it's the right move before you have paying users.
+
+---
+
+### 🔴 Required Before App Store Submission
+
+- [ ] **Apple Developer Program enrollment** — $99/year at developer.apple.com. Requires an Apple ID and 24–48 hours to process. Without this you cannot run `eas submit` or access App Store Connect.
+- [ ] **usecalibra.com/privacy must be live** — Apple will reject the app without a working privacy policy URL. Fix the Vercel deployment before submitting (see Website Status above).
+- [ ] **Tax information in App Store Connect** — Even for a free app, Apple requires a completed tax form (W-9 for US persons) before the app can go live. Go to App Store Connect → Agreements, Tax, and Banking.
+- [ ] **Export compliance declaration** — Apple asks whether your app uses encryption. The answer is yes (HTTPS/TLS). This triggers a follow-up: does it qualify for an exemption? Standard HTTPS qualifies for the exemption under EAR 740.17(b)(1). You declare this in App Store Connect when uploading the build — takes 2 minutes, just answer truthfully.
+- [ ] **Age rating questionnaire** — Completed inside App Store Connect when setting up the app. Calibra should rate 4+ (no objectionable content, no user-generated content visible to others, no location sharing).
+
+---
+
+### 🟡 Required If You're Charging Money
+
+- [ ] **Banking information in App Store Connect** — Bank account + routing number. Required to receive any revenue from paid downloads, subscriptions, or IAP. Even if launching free, set this up now so you can flip the switch later without delay.
+- [ ] **Set up products in App Store Connect before building** — If you plan to add a subscription or IAP, the product IDs must exist in App Store Connect before referencing them in code. You cannot add them retroactively to a submitted build.
+- [ ] **Decide your pricing model before submission** — Free / Freemium / Subscription. This shapes the App Store listing, the paywall copy, and which Apple agreements you need to sign (paid apps require the Paid Applications Agreement in addition to the free tier agreement).
+
+---
+
+### 🟡 Legal / Privacy
+
+- [ ] **Terms of Service** — Apple doesn't require one, but if you have user accounts (you do — Supabase auth) you should have ToS. It limits your liability and sets expectations. A simple one-page doc covering acceptable use, disclaimers, and dispute resolution is sufficient. Can be hosted at `usecalibra.com/terms`.
+- [ ] **Account deletion capability** — Since June 2022, Apple requires that any app with account creation must also offer account deletion from within the app. If Supabase auth is in the app, there must be a way for users to delete their account and all associated data. This is enforced during review.
+- [ ] **GDPR (if targeting EU users)** — If you're distributing in the EU App Store, users have the right to request a copy of their data and to have it deleted. The account deletion flow above covers the deletion part. A "export my data" path and a clear privacy policy covers the rest.
+- [ ] **Privacy Nutrition Label** — Filled out in App Store Connect. You must declare every data type the app collects and link it to a purpose (analytics, app functionality, etc.). Calibra collects: email address (auth), user content (nodes/coordinates/actions), and usage data (score history). Be accurate — Apple cross-checks this during review and developers have been rejected for under-declaring.
+
+---
+
+### 🟢 Recommended (Not Blocking)
+
+- [ ] **A real landing page at usecalibra.com** — Not required for App Store submission, but useful for the "Support URL" and "Marketing URL" fields in App Store Connect, and for anyone who finds the app and Googles it. Even a single-page site with a screenshot and an App Store badge is enough.
+- [ ] **Support email or URL** — App Store Connect requires a support URL or email. `support@usecalibra.com` forwarding to your personal email is fine.
+- [ ] **TestFlight beta group** — Before public launch, run a private TestFlight with 5–10 real users. They will find things you won't. Calibra's mental model (Node → Coordinate → Action) needs to survive first contact with people who've never seen it.
+- [ ] **App Store screenshots** — Require a simulator or physical device. Minimum: three 6.7" iPhone screenshots. These are the primary conversion surface on the App Store — spend time on them.
 
 ---
 

@@ -2,6 +2,17 @@
 
 ---
 
+## [website] — 2026-05-08
+
+### Website Launch — usecalibra.com
+- **Landing page live:** Added `vercel.json` with `outputDirectory: '_site'` and no-op build/install commands. Fixes 20+ consecutive ERROR deployments caused by Vercel trying to build the Expo package.json as a web project.
+- **`_site/index.html`:** Full Calibra landing page — dark aesthetic, animated orbital logo, feature grid, philosophy section, App Store CTA placeholder.
+- **`_site/privacy/index.html`:** Privacy policy page with back-link to main site.
+- **Domain:** `usecalibra.com` and `www.usecalibra.com` connected via Cloudflare DNS → Vercel. SSL issued.
+- **Email routing:** `privacy@usecalibra.com` and `hello@usecalibra.com` active via Cloudflare Email Routing, forwarding to personal Gmail.
+
+---
+
 ## [7dc923b] — 2026-05-05
 
 ### Radar Chart — Interaction & Stability

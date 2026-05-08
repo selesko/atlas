@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Modal, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Modal, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import Svg, { Circle, Path, Line, Polyline, Ellipse } from 'react-native-svg';
 import { Session } from '@supabase/supabase-js';
 import { useAppStore } from '../stores/useAppStore';
@@ -7,6 +7,7 @@ import { THEME, MOTIVATOR_TENSIONS, PERSONA_DATA } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { GlassCard } from '../components/GlassCard';
 import { Persona, MotivatorChoices } from '../types';
+import { deleteAccountData } from '../services/sync';
 
 const PERSONAS: Persona[] = ['Engineer', 'Seeker', 'Spiritual'];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -29,7 +30,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
     themeMode, setThemeMode,
     nodes,
     restoreNode, restoreGoal, restoreAction,
+    resetStore,
   } = useAppStore();
+
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    if (!session?.user.id) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    const error = await deleteAccountData(session.user.id);
+    if (error) {
+      setDeleteLoading(false);
+      setDeleteError(error);
+      return;
+    }
+    resetStore();
+    setDeleteModalVisible(false);
+  };
 
   const archivedNodes = nodes.filter(n => n.archived);
   const archivedGoals = nodes.flatMap(n => n.goals.filter(g => g.archived).map(g => ({ ...g, nodeId: n.id, nodeName: n.name, nodeColor: n.color })));
@@ -59,9 +80,55 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ session, onSignIn,
               <View style={styles.accountStatusDot} />
               <Text style={styles.accountStatusText}>SIGNED IN — UNRESTRICTED ACCESS</Text>
             </View>
-            <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut} activeOpacity={0.8}>
-              <Text style={[styles.signOutBtnText, { color: theme.textMuted }]}>SIGN OUT</Text>
-            </TouchableOpacity>
+            <View style={styles.accountActionsRow}>
+              <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut} activeOpacity={0.8}>
+                <Text style={[styles.signOutBtnText, { color: theme.textMuted }]}>SIGN OUT</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => { setDeleteConfirmText(''); setDeleteError(null); setDeleteModalVisible(true); }} activeOpacity={0.8}>
+                <Text style={styles.deleteAccountBtnText}>DELETE ACCOUNT</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Delete Account Confirmation Modal */}
+            <Modal visible={deleteModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteModalVisible(false)}>
+              <View style={styles.deleteOverlay}>
+                <View style={styles.deleteModal}>
+                  <Text style={styles.deleteModalTitle}>DELETE ACCOUNT</Text>
+                  <Text style={styles.deleteModalBody}>
+                    This permanently deletes your account and all data — nodes, coordinates, actions, and your profile. This cannot be undone.
+                  </Text>
+                  <Text style={styles.deleteModalPrompt}>Type DELETE to confirm</Text>
+                  <TextInput
+                    style={styles.deleteConfirmInput}
+                    value={deleteConfirmText}
+                    onChangeText={setDeleteConfirmText}
+                    placeholder="DELETE"
+                    placeholderTextColor="rgba(255,255,255,0.15)"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                  {deleteError && (
+                    <Text style={styles.deleteErrorText}>{deleteError}</Text>
+                  )}
+                  <View style={styles.deleteModalBtns}>
+                    <TouchableOpacity style={styles.deleteCancelBtn} onPress={() => setDeleteModalVisible(false)} activeOpacity={0.8} disabled={deleteLoading}>
+                      <Text style={styles.deleteCancelBtnText}>CANCEL</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.deleteConfirmBtn, deleteConfirmText !== 'DELETE' && styles.deleteConfirmBtnDisabled]}
+                      onPress={handleDeleteAccount}
+                      activeOpacity={0.8}
+                      disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+                    >
+                      {deleteLoading
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Text style={styles.deleteConfirmBtnText}>DELETE ACCOUNT</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         ) : (
           <View>
@@ -342,8 +409,25 @@ const styles = StyleSheet.create({
   accountStatusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   accountStatusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E', marginRight: 8 },
   accountStatusText: { color: '#22C55E', fontSize: 12, fontWeight: '700', letterSpacing: 1.5 },
+  accountActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   signOutBtn: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 10, alignSelf: 'flex-start' },
   signOutBtnText: { color: THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 2 },
+  deleteAccountBtn: { paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', borderRadius: 10, alignSelf: 'flex-start' },
+  deleteAccountBtnText: { color: 'rgba(239,68,68,0.7)', fontSize: 13, fontWeight: '700', letterSpacing: 2 },
+  // Delete modal
+  deleteOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  deleteModal: { backgroundColor: '#0f0f1a', borderRadius: 20, padding: 28, width: '100%', maxWidth: 360, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' },
+  deleteModalTitle: { color: '#ef4444', fontSize: 13, fontWeight: '800', letterSpacing: 3, marginBottom: 16 },
+  deleteModalBody: { color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 21, marginBottom: 24 },
+  deleteModalPrompt: { color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
+  deleteConfirmInput: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 3, marginBottom: 12 },
+  deleteErrorText: { color: '#ef4444', fontSize: 12, marginBottom: 12 },
+  deleteModalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  deleteCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', alignItems: 'center' },
+  deleteCancelBtnText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '800', letterSpacing: 2 },
+  deleteConfirmBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: '#ef4444', alignItems: 'center' },
+  deleteConfirmBtnDisabled: { backgroundColor: 'rgba(239,68,68,0.25)' },
+  deleteConfirmBtnText: { color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 2 },
   accountGuestNote: { color: THEME.textDim, fontSize: 13, lineHeight: 19, marginBottom: 16 },
   authBtnRow: { flexDirection: 'row', gap: 10 },
   signInBtn: { flex: 1, paddingVertical: 12, borderWidth: 1, borderColor: THEME.accent, borderRadius: 10, alignItems: 'center' },

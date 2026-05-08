@@ -648,7 +648,7 @@ export default function App() {
                   <View style={[styles.addNodeHeaderDot, { backgroundColor: editNodeForm.color }]} />
                 </View>
                 <Text style={styles.editFormLabel}>NAME</Text>
-                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoFocus autoCorrect={false} autoCapitalize="none" />
+                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoCorrect={false} autoCapitalize="none" />
                 <Text style={styles.editFormLabel}>INTENT</Text>
                 <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
                 <View style={styles.addNodeDivider} />
@@ -707,16 +707,23 @@ export default function App() {
           <View style={styles.infoOverlay} pointerEvents="box-none">
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingCoordinate(null)} activeOpacity={1} />
             <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardHeaderTitle}>EDIT COORDINATE</Text>
+                <TouchableOpacity onPress={() => setEditingCoordinate(null)} style={styles.cardHeaderClose} activeOpacity={0.7}>
+                  <Text style={styles.cardHeaderCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
               <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                <Text style={styles.editFormLabel}>NAME</Text>
                 <TextInput
-                  style={[styles.coordDetailName, styles.coordDetailNameInput]}
+                  style={styles.editFormInput}
                   value={goal.name}
-                  onChangeText={(text) => updateGoal(node.id, goal.id, { name: text })}
-                  placeholder="Coordinate name"
+                  onChangeText={(text) => updateGoal(node.id, goal.id, { name: text.toUpperCase() })}
+                  placeholder="COORDINATE NAME"
                   placeholderTextColor={THEME.textDim}
                   returnKeyType="done"
                   autoCorrect={false}
-                  autoCapitalize="none"
+                  autoCapitalize="characters"
                   selectTextOnFocus
                 />
                 <View style={styles.sliderRow}>
@@ -731,15 +738,16 @@ export default function App() {
                 </View>
 
                 {/* Desired Intent (Editable box) */}
-                <Text style={[styles.calibrationFeedLabel, { marginTop: 10, marginBottom: 8 }]}>DESIRED INTENT</Text>
+                <Text style={[styles.editFormLabel, { marginTop: 10 }]}>DESIRED INTENT</Text>
                 <View style={[styles.groundingPreview, { backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginBottom: 20 }]}>
                   <TextInput
-                    style={[styles.groundingPreviewText, { color: theme.text, fontSize: 14, minHeight: 40 }]}
+                    style={[styles.groundingPreviewText, { color: theme.text, fontSize: 14, minHeight: 40, paddingTop: 0, paddingBottom: 0 }]}
                     value={node.description}
                     onChangeText={(text) => updateNode(node.id, { description: text })}
                     placeholder="Define your desired intent..."
                     placeholderTextColor={THEME.textDim}
                     multiline
+                    textAlignVertical="top"
                   />
                 </View>
 
@@ -754,7 +762,7 @@ export default function App() {
 
                 <View style={styles.addNodeDivider} />
 
-                <Text style={styles.calibrationFeedLabel}>REFERENCE POINTS</Text>
+                <Text style={styles.editFormLabel}>REFERENCE POINTS</Text>
                 <View style={styles.referenceContainer}>
                   {[3, 6, 9].map((lvl) => (
                     <View key={lvl} style={styles.referenceField}>
@@ -782,19 +790,16 @@ export default function App() {
                 <View style={{ height: 20 }} />
               </ScrollView>
               {/* Bottom action row */}
-              <View style={{ marginTop: 12 }}>
-                {/* Archive / Delete / Done — small and muted */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
-                      <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => { if (editingCoordinate) { deleteGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
-                      <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
-                    <Text style={styles.coordEditDoneText}>DONE</Text>
+              <View style={{ marginTop: 12, gap: 10 }}>
+                <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
+                  <Text style={styles.coordEditDoneText}>DONE</Text>
+                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                  <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
+                    <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { if (editingCoordinate) { deleteGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
+                    <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -808,6 +813,12 @@ export default function App() {
         <View style={styles.infoOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} activeOpacity={1} />
           <View style={styles.taskEditCard} pointerEvents="auto">
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardHeaderTitle}>EDIT ACTION</Text>
+              <TouchableOpacity onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} style={styles.cardHeaderClose} activeOpacity={0.7}>
+                <Text style={styles.cardHeaderCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
             <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
               {/* Title */}
@@ -935,23 +946,23 @@ export default function App() {
 
             </ScrollView>
 
-            {/* Bottom row: archive/delete muted + DONE */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.07)' }}>
-              <View style={{ flexDirection: 'row', gap: 16 }}>
-                <TouchableOpacity onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} activeOpacity={0.6}>
-                  <Text style={{ color: THEME.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 }}>ARCHIVE</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} activeOpacity={0.6}>
-                  <Text style={{ color: '#fb7185', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, opacity: 0.6 }}>DELETE</Text>
-                </TouchableOpacity>
-              </View>
+            {/* Bottom actions */}
+            <View style={{ marginTop: 12, gap: 10, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.07)', paddingTop: 12 }}>
               <TouchableOpacity
-                style={{ paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, backgroundColor: 'rgba(56,189,248,0.12)', borderWidth: 1, borderColor: 'rgba(56,189,248,0.35)' }}
+                style={[styles.coordEditDoneBtn, { marginTop: 0 }]}
                 onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={{ color: THEME.accent, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>DONE</Text>
+                <Text style={styles.coordEditDoneText}>SAVE</Text>
               </TouchableOpacity>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                <TouchableOpacity onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
+                  <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
+                  <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -1194,14 +1205,14 @@ const styles = StyleSheet.create({
 
   // Coordinate edit
   coordinateEditCard: { backgroundColor: THEME.card, borderRadius: 12, padding: 20, maxWidth: 400, width: '100%', shadowColor: THEME.glow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 4 },
-  coordDetailName: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+  coordDetailName: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
   coordDetailNameInput: { color: '#f0f4ff', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.15)', paddingVertical: 4, paddingHorizontal: 0 },
   coordDetailSubtext: { color: THEME.textDim, fontSize: 13, lineHeight: 18, marginBottom: 20 },
   reflectionQuestion: { color: '#E2E8F0', fontSize: 15, fontWeight: '700', letterSpacing: 2, marginBottom: 20, textAlign: 'center', lineHeight: 22 },
   calibrationFeedLabel: { color: THEME.textDim, fontSize: 14, fontWeight: '800', letterSpacing: 2, marginBottom: 6, textTransform: 'uppercase' },
   coordEditTaskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' },
   coordEditTaskTitle: { color: 'white', fontSize: 14, flex: 1, marginLeft: 10 },
-  coordEditDoneBtn: { paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: '#475569', borderRadius: 12 },
+  coordEditDoneBtn: { paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#475569', borderRadius: 12 },
   coordEditDoneText: { color: '#475569', fontSize: 14, fontWeight: '700', letterSpacing: 2 },
   addCoordinateBtn: { marginTop: 8, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
   addCoordinateText: { color: THEME.textDim, fontSize: 14, fontWeight: '700', letterSpacing: 2 },
@@ -1295,6 +1306,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     padding: 0,
   },
+  // Card header (shared: coordinate edit, action edit)
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  cardHeaderTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 3, color: 'rgba(255,255,255,0.35)' },
+  cardHeaderClose: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  cardHeaderCloseText: { color: 'rgba(255,255,255,0.35)', fontSize: 16 },
+
   subtleArchiveBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   subtleArchiveBtnText: { color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
   subtleDeleteBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(239,68,68,0.1)' },

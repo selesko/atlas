@@ -142,10 +142,11 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
               <Text style={[styles.coordinatesLabel, { color: theme.textMuted }]}>DESIRED INTENT</Text>
               <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginBottom: 20 }}>
                 <TextInput
-                  style={[styles.nodeDescriptionText, { color: theme.text, marginBottom: 0 }]}
+                  style={[styles.nodeDescriptionText, { color: theme.text, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }]}
                   value={node.description}
                   onChangeText={(text) => updateNode(node.id, { description: text })}
                   multiline
+                  textAlignVertical="top"
                   placeholder="Define your desired intent..."
                   placeholderTextColor={theme.textMuted}
                 />
@@ -188,7 +189,7 @@ export const NodesScreen: React.FC<NodesScreenProps> = ({
                     <View style={styles.nodeOverlayCoordTitleRow}>
                       <View style={styles.goalNameRow}>
                         <View style={[styles.evidenceDot, { backgroundColor: hasCalibrations ? node.color : '#f59e0b' }]} />
-                        <Text style={[styles.goalName, { color: theme.text }]}>{goal.name}</Text>
+                        <Text style={[styles.goalName, { color: theme.text }]}>{goal.name.toUpperCase()}</Text>
                       </View>
                     </View>
 

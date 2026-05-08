@@ -82,6 +82,8 @@ interface AppState {
   setIdentityNotes: (notes: string) => void;
   /** @deprecated use setDevOverride — kept for backwards compat during transition */
   setHasAccess: (value: boolean) => void;
+  /** Wipes all local state and AsyncStorage — called after account deletion */
+  resetStore: () => void;
 
   // Helpers
   getNodeAvg: (node: Node) => string;
@@ -551,6 +553,20 @@ export const useAppStore = create<AppState>()(
   // backwards compat shim — delegates to devOverride
   setHasAccess: (value) => {
     set({ devOverride: value, hasAccess: get().session !== null || value });
+  },
+
+  resetStore: () => {
+    set({
+      nodes: [],
+      cognitiveModel: 'Architect',
+      motivatorChoices: {},
+      identityNotes: '',
+      persona: 'Seeker',
+      hasCompletedOnboarding: false,
+      session: null,
+      hasAccess: false,
+    });
+    AsyncStorage.removeItem('calibra-app-storage');
   },
     }),
     {

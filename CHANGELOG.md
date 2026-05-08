@@ -2,6 +2,30 @@
 
 ---
 
+## [card-consistency] — 2026-05-08
+
+### Edit Card Visual Consistency
+- **EDIT COORDINATE card:** Added consistent header ("EDIT COORDINATE" label + ✕ close button with divider). Replaced the bare `coordDetailName` TextInput used as a title with a proper `editFormLabel` "NAME" + `editFormInput` field, matching the node card pattern. Replaced `calibrationFeedLabel` with `editFormLabel` on "DESIRED INTENT" and "REFERENCE POINTS" sections.
+- **EDIT ACTION card:** Added consistent header ("EDIT ACTION" label + ✕ close button with divider). Restructured bottom action row from left/right split layout to full-width SAVE button + ARCHIVE/DELETE centered below — matching the coordinate edit card pattern. Renamed primary button from "DONE" to "SAVE" (action card uses `saveActionEdit()` to commit form state, unlike coordinate which auto-saves).
+- **New shared styles:** `cardHeader`, `cardHeaderTitle`, `cardHeaderClose`, `cardHeaderCloseText` — reusable across both cards.
+**Why:** Cards had three different header patterns, two different label styles, and inconsistent button layouts. Unified so every edit surface reads the same.
+**Files touched:** `App.tsx`
+
+---
+
+## [delete-account] — 2026-05-08
+
+### Delete Account — Apple compliance
+- Added `deleteAccountData(userId)` to `sync.ts` — deletes tasks, coordinates, nodes, and profile rows in dependency order, then calls `supabase.auth.signOut()`.
+- Added `resetStore()` to `useAppStore` — clears all local Zustand state and removes the AsyncStorage key.
+- Added DELETE ACCOUNT button to the Account section of ProfileScreen, visible only when signed in. Sits alongside SIGN OUT.
+- Confirmation modal requires typing "DELETE" before the confirm button activates. Shows loading spinner during deletion. Displays error message on failure.
+- On success: all Supabase data deleted, local store wiped, user returned to sign-in state.
+**Why:** Apple App Store requires in-app account deletion for any app that supports account creation (policy enforced since June 2022). Submission will be rejected without it.
+**Files touched:** `src/services/sync.ts`, `src/stores/useAppStore.ts`, `src/screens/ProfileScreen.tsx`
+
+---
+
 ## [website] — 2026-05-08
 
 ### Website Launch — usecalibra.com

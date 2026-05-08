@@ -156,6 +156,46 @@ export async function deleteAction(
   if (error) swallow('deleteAction', error);
 }
 
+// ─── Account deletion ────────────────────────────────────────────────────────
+
+/**
+ * Deletes all user data rows then signs out.
+ * The profile row deletion cascades to nodes/coordinates/actions via ON DELETE CASCADE.
+ * The auth user record is cleaned up server-side after sign-out.
+ * Returns an error string on failure, null on success.
+ */
+export async function deleteAccountData(userId: string): Promise<string | null> {
+  // Delete in dependency order to respect FK constraints
+  const { error: actionsErr } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('user_id', userId);
+  if (actionsErr) return actionsErr.message;
+
+  const { error: coordsErr } = await supabase
+    .from('coordinates')
+    .delete()
+    .eq('user_id', userId);
+  if (coordsErr) return coordsErr.message;
+
+  const { error: nodesErr } = await supabase
+    .from('nodes')
+    .delete()
+    .eq('user_id', userId);
+  if (nodesErr) return nodesErr.message;
+
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('user_id', userId);
+  if (profileErr) return profileErr.message;
+
+  const { error: signOutErr } = await supabase.auth.signOut();
+  if (signOutErr) return signOutErr.message;
+
+  return null;
+}
+
 // ─── Full fetch (on sign-in) ─────────────────────────────────────────────────
 
 export interface UserData {

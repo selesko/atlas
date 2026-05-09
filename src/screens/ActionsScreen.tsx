@@ -100,22 +100,6 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={styles.addActionBtn}
-        onPress={() => {
-          const selNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
-          const first = nodes[0]?.goals[0] ? { nodeId: nodes[0].id, goalId: nodes[0].goals[0].id } : null;
-          const initial = selNode?.goals?.[0] ? { nodeId: selNode.id, goalId: selNode.goals[0].id } : first;
-          setAddActionTarget(initial);
-          setAddActionTitle('');
-          setAddActionCoordDropdownOpen(false);
-          setAddActionOpen(true);
-        }}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.addActionBtnText, { color: theme.accent }]}>+ ADD ACTION</Text>
-      </TouchableOpacity>
-
       {nodeGroups.length === 0 ? (
         <View style={styles.actionEmptyState}>
           <Text style={[styles.actionEmptyStateText, { color: theme.textMuted }]}>
@@ -125,6 +109,15 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
               ? 'NO ACTIONS YET FOR THIS NODE'
               : 'NO ACTIVE ACTIONS'}
           </Text>
+          {!isFocusActive && (
+            <TouchableOpacity
+              style={[styles.addActionBtn, { marginTop: 16, marginBottom: 0, alignSelf: 'center' }]}
+              onPress={() => { setAddActionTarget(null); setAddActionTitle(''); setAddActionCoordDropdownOpen(false); setAddActionOpen(true); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.addActionBtnText, { color: theme.accent }]}>+ ADD ACTION</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         nodeGroups.map(({ node, coords }) => {
@@ -135,9 +128,6 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
             {/* Node header row */}
             <TouchableOpacity onPress={() => toggleCollapse(node.id)} activeOpacity={0.8}>
               <View style={styles.nodeHeader}>
-                <View style={[styles.nodeIcon, { backgroundColor: node.color }, collapsed && { opacity: 0.5 }]}>
-                  <Text style={styles.nodeIconLetter}>{node.name[0].toUpperCase()}</Text>
-                </View>
                 <Text style={[styles.nodeTitle, { color: node.color }, collapsed && { opacity: 0.5 }]}>{node.name.toUpperCase()}</Text>
                 <View style={styles.nodeHeaderRight}>
                   {collapsed && pendingCount > 0 && (
@@ -191,23 +181,22 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
                                     <Text style={[styles.actionTitle, { color: theme.text }, a.completed && styles.actionTitleStrike, a.completed && { opacity: 0.4 }]}>{a.title}</Text>
                                   </View>
                                   <View style={styles.actionRightBlock}>
-                                    {pri && <Text style={[styles.actionPriorityLabel, { color: theme.accent }]}>PRIORITY</Text>}
                                     <View style={[styles.effortBadge, { borderColor: EFFORT_COLORS[effort] }]}>
                                       <Text style={[styles.effortBadgeText, { color: EFFORT_COLORS[effort] }]}>{EFFORT_LABELS[effort]}</Text>
                                     </View>
                                     <TouchableOpacity
                                       onPress={() => toggleAction(node.id, coord.goalId, a.id)}
                                       activeOpacity={0.8}
-                                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                      hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                     >
-                                      <Svg width={22} height={22} viewBox="0 0 24 24">
+                                      <Svg width={28} height={28} viewBox="0 0 24 24">
                                         {a.completed ? (
                                           <>
                                             <Circle cx="12" cy="12" r="10" fill={node.color} />
                                             <Path d="M7 12l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                           </>
                                         ) : (
-                                          <Circle cx="12" cy="12" r="10" fill="none" stroke={theme.textMuted} strokeWidth="1.5" />
+                                          <Circle cx="12" cy="12" r="10" fill="none" stroke={node.color} strokeWidth="1.5" strokeOpacity={0.4} />
                                         )}
                                       </Svg>
                                     </TouchableOpacity>
@@ -255,121 +244,120 @@ export const ActionsScreen: React.FC<ActionsScreenProps> = ({
             onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); }}
             activeOpacity={1}
           />
-          <GlassCard style={styles.addActionSheet}>
+          {(() => {
+            const addActionNode = nodes.find(n => n.id === addActionTarget?.nodeId);
+            const effortColor = addActionNode?.color || theme.accent;
+            const dismiss = () => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); };
+            const submit = () => {
+              if (addActionTarget && addActionTitle.trim()) {
+                addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim(), addActionEffort);
+                dismiss();
+              }
+            };
+            return (
+              <GlassCard style={styles.addActionSheet}>
 
-            {/* Node selector */}
-            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>NODE</Text>
-            <View style={styles.addActionNodeRow}>
-              {nodes.map((n, i) => {
-                const sel = addActionTarget?.nodeId === n.id;
-                return (
-                  <TouchableOpacity
-                    key={n.id}
-                    style={[styles.addActionNodeBtn, sel && { borderColor: n.color }, i === nodes.length - 1 && { marginRight: 0 }]}
-                    onPress={() => { setAddActionTarget({ nodeId: n.id, goalId: n.goals[0]?.id || '' }); setAddActionCoordDropdownOpen(false); }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.addActionNodeBtnText, { color: sel ? n.color : theme.text }]}>{n.name.toUpperCase()}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                {/* 1. Title — first, autoFocus, fast capture */}
+                <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>TITLE</Text>
+                <TextInput
+                  style={[styles.addActionInput, { color: theme.text, borderBottomColor: theme.glassBorder, fontSize: 17, marginBottom: 20 }]}
+                  value={addActionTitle}
+                  onChangeText={setAddActionTitle}
+                  placeholder="What do you need to do?"
+                  placeholderTextColor={theme.textMuted}
+                  autoFocus
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  onSubmitEditing={submit}
+                />
 
-            {/* Coordinate selector */}
-            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>COORDINATE</Text>
-            <View style={styles.addActionDropdownWrap}>
-              <TouchableOpacity
-                style={[styles.addActionDropdownTrigger, { borderColor: theme.glassBorder }]}
-                onPress={() => addActionTarget?.nodeId && setAddActionCoordDropdownOpen(v => !v)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.addActionDropdownTriggerText, { color: theme.text }]} numberOfLines={1}>
-                  {addActionTarget?.nodeId
-                    ? (nodes.find(n => n.id === addActionTarget.nodeId)?.goals.find(g => g.id === addActionTarget.goalId)?.name || 'Select coordinate')
-                    : 'Select a node first'}
-                </Text>
-                <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.addActionDropdownChevron}>
-                  <Path fill={THEME.textDim} d="M7 10l5 5 5-5H7z" />
-                </Svg>
-              </TouchableOpacity>
-              {addActionCoordDropdownOpen && addActionTarget?.nodeId && (
-                <View style={styles.addActionDropdownList}>
-                  {(nodes.find(n => n.id === addActionTarget.nodeId)?.goals || []).map(g => (
-                    <TouchableOpacity
-                      key={g.id}
-                      style={[styles.addActionDropdownItem, addActionTarget?.goalId === g.id && styles.addActionDropdownItemActive]}
-                      onPress={() => { setAddActionTarget(addActionTarget ? { ...addActionTarget, goalId: g.id } : null); setAddActionCoordDropdownOpen(false); }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.addActionCoordChipText, { color: addActionTarget?.goalId === g.id ? nodes.find(n => n.id === addActionTarget.nodeId)?.color : theme.text }]}>{g.name}</Text>
-                    </TouchableOpacity>
-                  ))}
+                {/* 2. Effort — adapts to node color once selected */}
+                <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>EFFORT</Text>
+                <View style={[styles.effortRow, { marginBottom: 20 }]}>
+                  {(['easy', 'medium', 'heavy'] as ActionEffort[]).map(level => {
+                    const sel = addActionEffort === level;
+                    const labels: Record<ActionEffort, string> = { easy: 'EASY', medium: 'MEDIUM', heavy: 'HEAVY' };
+                    return (
+                      <TouchableOpacity
+                        key={level}
+                        style={[styles.effortBtn, sel && { borderColor: effortColor, backgroundColor: effortColor + '18' }]}
+                        onPress={() => setAddActionEffort(level)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.effortBtnText, { color: sel ? effortColor : theme.textMuted }]}>{labels[level]}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-              )}
-            </View>
 
-            {/* Title input */}
-            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>TITLE</Text>
-            <TextInput
-              style={[styles.addActionInput, { color: theme.text, borderBottomColor: theme.glassBorder }]}
-              value={addActionTitle}
-              onChangeText={setAddActionTitle}
-              placeholder="Action title…"
-              placeholderTextColor={theme.textMuted}
-              autoFocus
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                if (addActionTarget && addActionTitle.trim()) {
-                  addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim(), addActionEffort);
-                  setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionEffort('easy');
-                }
-              }}
-            />
+                {/* 3. Node selector */}
+                <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>NODE</Text>
+                <View style={[styles.addActionNodeRow, { marginBottom: 16 }]}>
+                  {nodes.filter(n => !n.archived).map((n, i) => {
+                    const sel = addActionTarget?.nodeId === n.id;
+                    return (
+                      <TouchableOpacity
+                        key={n.id}
+                        style={[styles.addActionNodeBtn, sel && { borderColor: n.color, backgroundColor: n.color + '18' }, i === nodes.filter(x => !x.archived).length - 1 && { marginRight: 0 }]}
+                        onPress={() => { setAddActionTarget({ nodeId: n.id, goalId: n.goals.filter(g => !g.archived)[0]?.id || '' }); setAddActionCoordDropdownOpen(false); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.addActionNodeBtnText, { color: sel ? n.color : theme.textMuted }]}>{n.name.toUpperCase()}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-            {/* Effort picker */}
-            <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>EFFORT</Text>
-            <View style={styles.effortRow}>
-              {(['easy', 'medium', 'heavy'] as ActionEffort[]).map(level => {
-                const sel = addActionEffort === level;
-                const labels: Record<ActionEffort, string> = { easy: 'EASY', medium: 'MEDIUM', heavy: 'HEAVY' };
-                return (
+                {/* 4. Coordinate selector */}
+                <Text style={[styles.addActionFormLabel, { color: theme.textMuted }]}>COORDINATE</Text>
+                <View style={styles.addActionDropdownWrap}>
                   <TouchableOpacity
-                    key={level}
-                    style={[styles.effortBtn, sel && { borderColor: theme.accent, backgroundColor: 'rgba(56,189,248,0.1)' }]}
-                    onPress={() => setAddActionEffort(level)}
+                    style={[styles.addActionDropdownTrigger, { borderColor: addActionNode ? addActionNode.color + '44' : theme.glassBorder, opacity: addActionNode ? 1 : 0.5 }]}
+                    onPress={() => addActionTarget?.nodeId && setAddActionCoordDropdownOpen(v => !v)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.effortBtnText, { color: sel ? theme.accent : theme.textMuted }]}>{labels[level]}</Text>
+                    <Text style={[styles.addActionDropdownTriggerText, { color: addActionNode ? effortColor : theme.textMuted }]} numberOfLines={1}>
+                      {addActionTarget?.nodeId
+                        ? (addActionNode?.goals.find(g => g.id === addActionTarget.goalId)?.name || 'Select coordinate')
+                        : 'Select a node first'}
+                    </Text>
+                    <Svg width={14} height={14} viewBox="0 0 24 24" style={styles.addActionDropdownChevron}>
+                      <Path fill={THEME.textDim} d="M7 10l5 5 5-5H7z" />
+                    </Svg>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
+                  {addActionCoordDropdownOpen && addActionTarget?.nodeId && (
+                    <View style={styles.addActionDropdownList}>
+                      {(addActionNode?.goals.filter(g => !g.archived) || []).map(g => (
+                        <TouchableOpacity
+                          key={g.id}
+                          style={[styles.addActionDropdownItem, addActionTarget?.goalId === g.id && { backgroundColor: effortColor + '14' }]}
+                          onPress={() => { setAddActionTarget(addActionTarget ? { ...addActionTarget, goalId: g.id } : null); setAddActionCoordDropdownOpen(false); }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.addActionCoordChipText, { color: addActionTarget?.goalId === g.id ? effortColor : theme.text }]}>{g.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
 
-            {/* Actions */}
-            <View style={styles.addActionActions}>
-              <TouchableOpacity
-                style={styles.addActionCancel}
-                onPress={() => { setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionCoordDropdownOpen(false); setAddActionEffort('easy'); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.addActionCancelText, { color: theme.textMuted }]}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.addActionSubmit, { borderColor: theme.glassBorder }]}
-                onPress={() => {
-                  if (addActionTarget && addActionTitle.trim()) {
-                    addAction(addActionTarget.nodeId, addActionTarget.goalId, addActionTitle.trim(), addActionEffort);
-                    setAddActionOpen(false); setAddActionTitle(''); setAddActionTarget(null); setAddActionEffort('easy');
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.addActionSubmitText, { color: theme.text }]}>ADD ACTION</Text>
-              </TouchableOpacity>
-            </View>
-          </GlassCard>
+                {/* Bottom actions */}
+                <View style={styles.addActionActions}>
+                  <TouchableOpacity style={styles.addActionCancel} onPress={dismiss} activeOpacity={0.7}>
+                    <Text style={[styles.addActionCancelText, { color: theme.textMuted }]}>CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addActionSubmit, { borderColor: addActionTarget && addActionTitle.trim() ? effortColor : theme.glassBorder }]}
+                    onPress={submit}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.addActionSubmitText, { color: addActionTarget && addActionTitle.trim() ? effortColor : theme.textMuted }]}>ADD ACTION</Text>
+                  </TouchableOpacity>
+                </View>
+              </GlassCard>
+            );
+          })()}
         </KeyboardAvoidingView>
       </Modal>
     </View>

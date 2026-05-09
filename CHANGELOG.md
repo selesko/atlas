@@ -2,6 +2,53 @@
 
 ---
 
+## [inline-title-edit] — 2026-05-09
+
+### Coord + Node edit cards — inline editable title in header
+- **Coordinate edit card:** Header `<Text>` showing `goal.name` in `node.color` replaced with a `<TextInput>` — same style, transparent background, no border. Tapping the title edits it in place. RENAME section (divider + label + input) removed from the bottom of the card.
+- **Node edit card:** Header "EDIT NODE" label replaced with a `<TextInput>` showing `editNodeForm.name` in the selected node color. NAME field + label removed from the ScrollView content.
+- Both inputs use `autoCapitalize="characters"`, `selectTextOnFocus`, no visual difference from the text they replaced when not focused.
+**Why:** Rename was buried at the bottom of the card as a low-priority afterthought. The title is already visible and prominent — it should just be tappable. Removes a redundant section and makes the interaction more direct.
+**Files touched:** `App.tsx`
+
+---
+
+## [node-intent-left-bar] — 2026-05-09
+
+### Coord edit card — NODE INTENT gets colored left-bar style
+- NODE INTENT field in the coordinate edit card now uses `intentInput` style (italic, `fontWeight: '300'`, `fontSize: 18`, `borderLeftWidth: 2`) with `borderLeftColor: node.color + '90'` — matching the intent field in the node edit and add cards.
+- Replaced the generic `inputBox` wrapper + `inputBoxText` style.
+**Why:** Consistency — intent is intent everywhere. The left accent bar signals it's a qualitative vision field, not a data input.
+**Files touched:** `App.tsx`
+
+---
+
+## [edit-node-card-layout] — 2026-05-09
+
+### Edit Node card — matches Coordinate edit card layout
+- Replaced `KeyboardAvoidingView` + `addNodeCard` container with `coordinateEditCard` + `maxHeight: '85%'` — same container as the coord card.
+- Header now uses `cardHeader` / `cardHeaderTitle` / `cardHeaderClose` / `cardHeaderCloseText` shared styles.
+- ScrollView holds content only; SAVE button and ARCHIVE/DELETE links are pinned outside the scroll at the bottom.
+- SAVE button uses `coordEditDoneBtn` styled in `editNodeForm.color` — same pattern as coord card's DONE button.
+**Why:** The node and coordinate edit cards are the same surface. They should feel identical in size, structure, and interaction.
+**Files touched:** `App.tsx`
+
+---
+
+## [actions-page-v2] — 2026-05-09
+
+### Actions page — 5 UX improvements
+- **TITLE first in add modal:** Form order flipped to TITLE → EFFORT → NODE → COORDINATE. Keyboard opens immediately on the title field (`autoFocus`). Fast capture first, assign context second. Placeholder updated to "What do you need to do?".
+- **Top "+ ADD ACTION" button removed:** The global button pre-filled "first node, first coord" — almost never the right target. Each coordinate group has an inline add button that pre-fills correctly. The button now lives only in the empty state (where it's actually needed).
+- **Completion circle enlarged:** 22×22 → 28×28 SVG. `hitSlop` 6px → 14px all around. Completing an action is the #1 interaction on this page — the tap target now matches that priority. Incomplete circle stroke now uses node color at 40% opacity (was a flat muted grey).
+- **"PRIORITY" text label removed:** The filled star already communicates priority. The text label next to it was duplicated signal eating horizontal space from the action title.
+- **Effort picker adopts node color:** Once a node is selected in the add modal, the selected effort pill uses that node's color instead of the fixed accent blue. Consistent with the edit card. ADD ACTION button border/text also adapts to node color when form is ready to submit.
+- **Node icon removed from node headers:** Letter-circle icon removed from the Actions page node headers (already removed from Evaluate page). More horizontal space for the node title.
+**Why:** The add flow put node/coord selection before title, creating friction for quick capture. The completion circle was too small for the primary action. Redundant UI elements (PRIORITY label, node icon) added noise without signal.
+**Files touched:** `src/screens/ActionsScreen.tsx`
+
+---
+
 ## [action-card-v2] — 2026-05-09
 
 ### Edit Action Card — 5 design improvements
@@ -23,6 +70,70 @@
 - **Added:** `coordScore` style to App.tsx StyleSheet (`fontSize: 26, fontWeight: '200'`) — was referenced in coord edit card JSX but missing from StyleSheet.
 **Why:** Coordinate edit card slider was visually inconsistent with the Evaluate page (NodesScreen) after the handle/track upgrade was applied only to NodesScreen.
 **Files touched:** `App.tsx`
+
+---
+
+## [coord-card-ui] — 2026-05-08
+
+### Coordinate Card — 5 UI improvements (NodesScreen + coord edit card)
+
+**Evaluate page (NodesScreen) coordinate cards:**
+- **Removed full-card tap:** Replaced `TouchableOpacity` wrapper with `View` — card no longer opens on tap. Editing now requires the explicit `›` chevron.
+- **`›` edit chevron:** Small muted chevron on the right of the label row opens the coordinate edit card. `hitSlop` expanded for easy tap.
+- **Score display:** Added `{goal.value}` score number to the right of the slider, colored by `valueColor` (white→nodeColor intensity). Removes ambiguity about what the slider represents.
+- **Flat card style:** Removed dynamic border color. Cards now use flat `rgba(255,255,255,0.05)` background + `rgba(255,255,255,0.07)` border — consistent, not reactive.
+- **Larger handle:** Handle upgraded 12×12→18×18, borderRadius 6→9, inner dot 6×6→8×8. Track 2px→3px. 16px card padding.
+
+**Edit Coordinate card (App.tsx):**
+- **Coord name in header:** `goal.name` shown in `node.color` in the card header — immediate context.
+- **EVALUATE slider as hero:** Slider moved to the top of the card with score visible beside it.
+- **NODE INTENT:** Renamed from "DESIRED INTENT". Placed below slider as secondary context.
+- **ACTIONS section:** Incomplete actions first (unfilled dot), completed below (filled node.color dot, strikethrough). RENAME field at bottom as lowest priority.
+- **DONE in node color:** Button border and text use `node.color`.
+**Why:** Coord cards had no clear affordance for editing (full-card tap was invisible), score wasn't visible without sliding, and the edit card led with a rename field instead of the most important action (evaluate).
+**Files touched:** `App.tsx`, `src/screens/NodesScreen.tsx`
+
+---
+
+## [intent-field] — 2026-05-08
+
+### Node Intent field — redesigned to be more distinctive
+- **Style:** Replaced plain bordered box with an italic left-accent field (`borderLeftWidth: 2`, `borderLeftColor: node.color + '90'`, `fontStyle: 'italic'`, `fontWeight: '300'`, `fontSize: 18`, `lineHeight: 28`). Visually differentiates intent from data inputs.
+- **Scope:** Applied in both the Add Node card and the Edit Node card.
+**Why:** The intent field is a qualitative vision statement, not a data field. It needed a visually distinct treatment to signal that difference.
+**Files touched:** `App.tsx`
+
+---
+
+## [evaluate-page] — 2026-05-08
+
+### Evaluate page (NodesScreen) — premium review pass
+- **Removed momentum functions:** Deleted `getMomentum`, `getNodeMomentum`, `getMomentumSliderColor`, `getMomentumGlow` — dead code, never called. Color system simplified to white-at-low → node-color-at-high via `lerpColor`.
+- **Removed node icon:** Deleted `nodeIcon` / `nodeIconLetter` badge from the node header. More horizontal space for the node title.
+- **Removed DESIRED INTENT block:** The node intent block in the expanded node view was removed. Intent lives in the node edit card only.
+- **Slider track 3px, handle 18×18, 16px card padding:** See `[coord-card-ui]` above.
+**Why:** Momentum code was adding complexity with no visible output. Node icon was competing for space with the title. DESIRED INTENT in the dropdown distracted from evaluation.
+**Files touched:** `src/screens/NodesScreen.tsx`
+
+---
+
+## [nodes-dropdown] — 2026-05-08
+
+### Evaluate page — label and slider label changes
+- **"ACTIVE COORDINATE" → "EVALUATE":** Section label renamed to match the page intent.
+- **Removed per-slider "EVALUATE" labels:** Each coordinate card previously showed "EVALUATE" above its slider. Redundant given the section label — removed.
+**Why:** Two levels of "EVALUATE" labeling was redundant. One section label is enough.
+**Files touched:** `src/screens/NodesScreen.tsx`
+
+---
+
+## [radar-effort-size] — 2026-05-08
+
+### Radar — action dot size reflects effort level
+- **Bug fix:** Changing an action's effort level (easy/medium/heavy) in the action chart card was not updating the dot size on the radar.
+- **Fix:** Added `effortRadius` variable (`heavy: 10, medium: 7, easy: 5`). Changed `r={isCompleted ? 9 : 6}` to `r={isCompleted ? effortRadius + 2 : effortRadius}`.
+**Why:** Effort level is visually encoded as dot size on the radar. Changing it in the edit card had no effect because the radius was hardcoded.
+**Files touched:** `src/components/Radar.tsx`
 
 ---
 

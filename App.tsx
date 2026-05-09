@@ -651,52 +651,51 @@ export default function App() {
       {!!editingNodeId && (
         <View style={styles.infoOverlay} pointerEvents="box-none">
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={1} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-            <View style={styles.addNodeCard} pointerEvents="auto">
-              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                <View style={styles.addNodeHeader}>
-                  <Text style={styles.addNodeHeaderLabel}>EDIT NODE</Text>
-                  <View style={[styles.addNodeHeaderDot, { backgroundColor: editNodeForm.color }]} />
-                </View>
-                <Text style={styles.editFormLabel}>NAME</Text>
-                <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoCorrect={false} autoCapitalize="none" />
-                <Text style={styles.editFormLabel}>INTENT</Text>
-                <TextInput style={[styles.intentInput, { borderLeftColor: editNodeForm.color + '90' }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="Describe your vision for this domain…" placeholderTextColor={THEME.textDim} multiline textAlignVertical="top" />
-                <View style={styles.addNodeDivider} />
-                <Text style={styles.editFormLabel}>COLOR</Text>
-                <View style={styles.addNodeColorRow}>
-                  {NODE_COLORS.map(c => (
-                    <TouchableOpacity key={c} onPress={() => setEditNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, editNodeForm.color === c && styles.addNodeSwatchSelected]} />
-                  ))}
-                </View>
-                {/* Archive / Delete */}
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
-                  <TouchableOpacity
-                    style={styles.subtleArchiveBtn}
-                    onPress={() => { if (editingNodeId) { archiveNode(editingNodeId); setEditingNodeId(null); } }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.subtleDeleteBtn}
-                    onPress={() => { if (editingNodeId) { deleteNode(editingNodeId); setEditingNodeId(null); } }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.actionRow}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} activeOpacity={0.7}>
-                    <Text style={styles.cancelBtnText}>CANCEL</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.submitBtn, { backgroundColor: editNodeForm.color, borderColor: editNodeForm.color }]} onPress={() => { if (editNodeForm.name.trim() && editingNodeId) { updateNode(editingNodeId, { name: editNodeForm.name.trim(), description: editNodeForm.description.trim(), color: editNodeForm.color }); setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); } }} activeOpacity={0.7}>
-                    <Text style={[styles.submitBtnText, { color: '#fff' }]}>SAVE</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
+          <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
+            {/* Header — name is editable inline */}
+            <View style={styles.cardHeader}>
+              <TextInput
+                style={[styles.cardHeaderTitle, { color: editNodeForm.color, flex: 1, padding: 0, backgroundColor: 'transparent' }]}
+                value={editNodeForm.name}
+                onChangeText={t => setEditNodeForm(f => ({ ...f, name: t.toUpperCase() }))}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                selectTextOnFocus
+              />
+              <TouchableOpacity onPress={() => { setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); }} style={styles.cardHeaderClose} activeOpacity={0.7}>
+                <Text style={styles.cardHeaderCloseText}>✕</Text>
+              </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.editFormLabel}>INTENT</Text>
+              <TextInput style={[styles.intentInput, { borderLeftColor: editNodeForm.color + '90' }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="Describe your vision for this domain…" placeholderTextColor={THEME.textDim} multiline textAlignVertical="top" />
+              <View style={styles.addNodeDivider} />
+              <Text style={styles.editFormLabel}>COLOR</Text>
+              <View style={[styles.addNodeColorRow, { marginBottom: 8 }]}>
+                {NODE_COLORS.map(c => (
+                  <TouchableOpacity key={c} onPress={() => setEditNodeForm(f => ({ ...f, color: c }))} activeOpacity={0.8} style={[styles.addNodeSwatch, { backgroundColor: c }, editNodeForm.color === c && styles.addNodeSwatchSelected]} />
+                ))}
+              </View>
+            </ScrollView>
+            {/* Buttons pinned outside scroll — matches coord card pattern */}
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.coordEditDoneBtn, { marginTop: 0, borderColor: editNodeForm.color }]}
+                onPress={() => { if (editNodeForm.name.trim() && editingNodeId) { updateNode(editingNodeId, { name: editNodeForm.name.trim(), description: editNodeForm.description.trim(), color: editNodeForm.color }); setEditingNodeId(null); setEditNodeForm({ name: '', description: '', color: NODE_COLORS[0] }); } }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.coordEditDoneText, { color: editNodeForm.color }]}>SAVE</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                <TouchableOpacity style={styles.subtleArchiveBtn} onPress={() => { if (editingNodeId) { archiveNode(editingNodeId); setEditingNodeId(null); } }} activeOpacity={0.7}>
+                  <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.subtleDeleteBtn} onPress={() => { if (editingNodeId) { deleteNode(editingNodeId); setEditingNodeId(null); } }} activeOpacity={0.7}>
+                  <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </View>
       )}
 
@@ -722,7 +721,14 @@ export default function App() {
 
               {/* Header: coordinate name in node color */}
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardHeaderTitle, { color: node.color, fontSize: 13, letterSpacing: 2 }]}>{goal.name}</Text>
+                <TextInput
+                  style={[styles.cardHeaderTitle, { color: node.color, fontSize: 13, letterSpacing: 2, flex: 1, padding: 0, backgroundColor: 'transparent' }]}
+                  value={goal.name}
+                  onChangeText={(text) => updateGoal(node.id, goal.id, { name: text.toUpperCase() })}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  selectTextOnFocus
+                />
                 <TouchableOpacity onPress={() => setEditingCoordinate(null)} style={styles.cardHeaderClose} activeOpacity={0.7}>
                   <Text style={styles.cardHeaderCloseText}>✕</Text>
                 </TouchableOpacity>
@@ -745,17 +751,15 @@ export default function App() {
 
                 {/* 2. NODE INTENT */}
                 <Text style={[styles.editFormLabel, { marginTop: 20 }]}>NODE INTENT</Text>
-                <View style={[styles.inputBox, { marginBottom: 20 }]}>
-                  <TextInput
-                    style={[styles.inputBoxText, { minHeight: 40 }]}
-                    value={node.description}
-                    onChangeText={(text) => updateNode(node.id, { description: text })}
-                    placeholder="Define your desired intent..."
-                    placeholderTextColor={THEME.textDim}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </View>
+                <TextInput
+                  style={[styles.intentInput, { borderLeftColor: node.color + '90' }]}
+                  value={node.description}
+                  onChangeText={(text) => updateNode(node.id, { description: text })}
+                  placeholder="Define your desired intent..."
+                  placeholderTextColor={THEME.textDim}
+                  multiline
+                  textAlignVertical="top"
+                />
 
                 {/* 3. ACTIONS — incomplete first, completed below */}
                 <Text style={styles.editFormLabel}>ACTIONS</Text>
@@ -790,22 +794,7 @@ export default function App() {
                   </>
                 )}
 
-                {/* 4. RENAME — lowest priority, at the bottom */}
-                <View style={[styles.addNodeDivider, { marginTop: 8 }]} />
-                <Text style={[styles.editFormLabel, { color: THEME.textDim }]}>RENAME</Text>
-                <TextInput
-                  style={styles.editFormInput}
-                  value={goal.name}
-                  onChangeText={(text) => updateGoal(node.id, goal.id, { name: text.toUpperCase() })}
-                  placeholder="COORDINATE NAME"
-                  placeholderTextColor={THEME.textDim}
-                  returnKeyType="done"
-                  autoCorrect={false}
-                  autoCapitalize="characters"
-                  selectTextOnFocus
-                />
-
-                <View style={{ height: 20 }} />
+                <View style={{ height: 8 }} />
               </ScrollView>
 
               {/* 5. DONE in node color — primary CTA */}

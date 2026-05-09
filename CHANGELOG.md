@@ -2,6 +2,42 @@
 
 ---
 
+## [action-card-v2] — 2026-05-09
+
+### Edit Action Card — 5 design improvements
+- **TITLE field:** `fontSize` 16→17, `letterSpacing` 0.3, white text — visually distinguishes it as the primary field.
+- **Effort picker:** Selected pill now uses the action's node color instead of the fixed accent blue. Consistent with the rest of the system's color philosophy.
+- **NOTES field:** Replaced `taskEditNotes` style with shared `inputBox` + `inputBoxText` (bordered box, `rgba(255,255,255,0.03)` bg). Both edit cards now use the same input surface.
+- **PRIORITY row:** Moved below NOTES. It's a secondary concern and now sits at the natural bottom of the form. Star icon and label also adopt node color when active.
+- **SAVE button:** Now uses `nodeColor` for border and text (same pattern as coord edit card's DONE button). Falls back to muted white when no node is selected.
+- **Architecture:** Refactored IIFE pattern — `selNode`, `nodeColor`, `coords`, `selCoord` computed once at the top of the block instead of duplicated inside two separate IIFEs.
+**Why:** Action card had three inconsistencies vs the coord card: fixed accent color on effort/priority, mismatched notes field style, and a colorless SAVE button.
+**Files touched:** `App.tsx`
+
+---
+
+## [slider-styles] — 2026-05-09
+
+### Slider style consistency — App.tsx matches NodesScreen
+- **Updated:** `sliderLine` 2px→3px height; `sliderFill` top 11→10, height 2→3; `sliderHandle` 12×12→18×18, borderRadius 6→9, top 6→3, shadowOpacity 0.8→0.9, shadowRadius 10→12; `sliderHandleInner` 6×6→8×8.
+- **Added:** `coordScore` style to App.tsx StyleSheet (`fontSize: 26, fontWeight: '200'`) — was referenced in coord edit card JSX but missing from StyleSheet.
+**Why:** Coordinate edit card slider was visually inconsistent with the Evaluate page (NodesScreen) after the handle/track upgrade was applied only to NodesScreen.
+**Files touched:** `App.tsx`
+
+---
+
+## [coord-card-v2] — 2026-05-08
+
+### Edit Coordinate Card — Reference Points removed, Actions added, Evaluate labels
+- **Removed:** Reference Points section (3 LVL input boxes) and the CURRENT GROUNDING status line. Feature deferred to a later "deepen this coordinate" flow — too cognitively demanding on first use. Data model (`Goal.references`) preserved.
+- **Added:** ACTIONS section at the bottom of the card — lists all non-archived actions for the coordinate with a tap-to-toggle completion dot and effort badge on the right.
+- **Added:** "EVALUATE" label in small gray text above every slider — in the Edit Coordinate card and in the Evaluate screen coordinate rows.
+- **Future features:** Documented Reference Points in `CLAUDE.md` under `## Future Features`.
+**Why:** Reference points required too much upfront work. Actions are more immediately useful in the editing context.
+**Files touched:** `App.tsx`, `src/screens/NodesScreen.tsx`, `CLAUDE.md`
+
+---
+
 ## [card-consistency] — 2026-05-08
 
 ### Edit Card Visual Consistency

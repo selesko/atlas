@@ -18,7 +18,18 @@ import { NodesScreen } from './src/screens/NodesScreen';
 import { ActionsScreen } from './src/screens/ActionsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
-import { OrbitalValueBadge } from './src/components/OrbitalValueBadge';
+import { OrbitalValueBadge } from './src/components/OrbitalValueBadge'; // kept for external use
+
+/** Interpolate between two hex colors by t (0→1) */
+function lerpColor(a: string, b: string, t: number): string {
+  const h = (s: string) => parseInt(s.slice(1), 16);
+  const ar = (h(a) >> 16) & 0xff, ag = (h(a) >> 8) & 0xff, ab = h(a) & 0xff;
+  const br = (h(b) >> 16) & 0xff, bg = (h(b) >> 8) & 0xff, bb = h(b) & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bv = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${bv.toString(16).padStart(2,'0')}`;
+}
 import { BlobBackground } from './src/components/BlobBackground';
 import { useTheme } from './src/hooks/useTheme';
 
@@ -614,7 +625,7 @@ export default function App() {
                 <Text style={styles.editFormLabel}>NAME</Text>
                 <TextInput style={styles.editFormInput} value={addNodeForm.name} onChangeText={t => setAddNodeForm(f => ({ ...f, name: t }))} placeholder="Work, Health, Relationships…" placeholderTextColor={THEME.textDim} autoFocus autoCorrect={false} autoCapitalize="none" />
                 <Text style={styles.editFormLabel}>INTENT</Text>
-                <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={addNodeForm.description} onChangeText={t => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
+                <TextInput style={[styles.intentInput, { borderLeftColor: addNodeForm.color + '90' }]} value={addNodeForm.description} onChangeText={t => setAddNodeForm(f => ({ ...f, description: t }))} placeholder="Describe your vision for this domain…" placeholderTextColor={THEME.textDim} multiline textAlignVertical="top" />
                 <View style={styles.addNodeDivider} />
                 <Text style={styles.editFormLabel}>COLOR</Text>
                 <View style={styles.addNodeColorRow}>
@@ -650,7 +661,7 @@ export default function App() {
                 <Text style={styles.editFormLabel}>NAME</Text>
                 <TextInput style={styles.editFormInput} value={editNodeForm.name} onChangeText={t => setEditNodeForm(f => ({ ...f, name: t }))} placeholder="Node name" placeholderTextColor={THEME.textDim} autoCorrect={false} autoCapitalize="none" />
                 <Text style={styles.editFormLabel}>INTENT</Text>
-                <TextInput style={[styles.editFormInput, { minHeight: 52 }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="What does this node represent?" placeholderTextColor={THEME.textDim} multiline />
+                <TextInput style={[styles.intentInput, { borderLeftColor: editNodeForm.color + '90' }]} value={editNodeForm.description} onChangeText={t => setEditNodeForm(f => ({ ...f, description: t }))} placeholder="Describe your vision for this domain…" placeholderTextColor={THEME.textDim} multiline textAlignVertical="top" />
                 <View style={styles.addNodeDivider} />
                 <Text style={styles.editFormLabel}>COLOR</Text>
                 <View style={styles.addNodeColorRow}>
@@ -703,18 +714,85 @@ export default function App() {
           updateValue(node.id, goal.id, Math.max(1, Math.min(10, val)));
         };
         const pan = PanResponder.create({ onStartShouldSetPanResponder: () => true, onPanResponderGrant: applySlider, onPanResponderMove: applySlider });
+        const valueColor = lerpColor('#ffffff', node.color, goal.value / 10);
         return (
           <View style={styles.infoOverlay} pointerEvents="box-none">
             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setEditingCoordinate(null)} activeOpacity={1} />
             <View style={[styles.coordinateEditCard, { maxHeight: '85%' }]} pointerEvents="auto">
+
+              {/* Header: coordinate name in node color */}
               <View style={styles.cardHeader}>
-                <Text style={styles.cardHeaderTitle}>EDIT COORDINATE</Text>
+                <Text style={[styles.cardHeaderTitle, { color: node.color, fontSize: 13, letterSpacing: 2 }]}>{goal.name}</Text>
                 <TouchableOpacity onPress={() => setEditingCoordinate(null)} style={styles.cardHeaderClose} activeOpacity={0.7}>
                   <Text style={styles.cardHeaderCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
-                <Text style={styles.editFormLabel}>NAME</Text>
+
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+
+                {/* 1. EVALUATE — slider is the hero */}
+                <Text style={styles.evaluateLabel}>EVALUATE</Text>
+                <View style={styles.sliderRow}>
+                  <View style={styles.sliderTrack} onLayout={e => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
+                    <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.3 }]} />
+                    <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: valueColor }]} />
+                    <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -9, borderColor: valueColor, shadowColor: valueColor }]}>
+                      <View style={[styles.sliderHandleInner, { backgroundColor: valueColor }]} />
+                    </View>
+                  </View>
+                  <Text style={[styles.coordScore, { color: valueColor }]}>{goal.value}</Text>
+                </View>
+
+                {/* 2. NODE INTENT */}
+                <Text style={[styles.editFormLabel, { marginTop: 20 }]}>NODE INTENT</Text>
+                <View style={[styles.inputBox, { marginBottom: 20 }]}>
+                  <TextInput
+                    style={[styles.inputBoxText, { minHeight: 40 }]}
+                    value={node.description}
+                    onChangeText={(text) => updateNode(node.id, { description: text })}
+                    placeholder="Define your desired intent..."
+                    placeholderTextColor={THEME.textDim}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* 3. ACTIONS — incomplete first, completed below */}
+                <Text style={styles.editFormLabel}>ACTIONS</Text>
+                {goal.actions.filter(a => !a.archived).length === 0 ? (
+                  <Text style={{ color: THEME.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 1, marginBottom: 16 }}>No actions yet</Text>
+                ) : (
+                  <>
+                    {goal.actions.filter(a => !a.archived && !a.completed).map(action => (
+                      <TouchableOpacity
+                        key={action.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14, marginBottom: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' }}
+                        onPress={() => toggleAction(node.id, goal.id, action.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />
+                        <Text style={{ flex: 1, color: 'white', fontSize: 13, fontWeight: '600' }}>{action.title}</Text>
+                        {action.effort && <Text style={{ color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 1.5 }}>{action.effort.toUpperCase()}</Text>}
+                      </TouchableOpacity>
+                    ))}
+                    {goal.actions.filter(a => !a.archived && a.completed).map(action => (
+                      <TouchableOpacity
+                        key={action.id}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 14, marginBottom: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.02)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' }}
+                        onPress={() => toggleAction(node.id, goal.id, action.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: node.color, flexShrink: 0 }} />
+                        <Text style={{ flex: 1, color: THEME.textDim, fontSize: 13, fontWeight: '600', textDecorationLine: 'line-through' }}>{action.title}</Text>
+                        {action.effort && <Text style={{ color: THEME.textDim, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, opacity: 0.4 }}>{action.effort.toUpperCase()}</Text>}
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+
+                {/* 4. RENAME — lowest priority, at the bottom */}
+                <View style={[styles.addNodeDivider, { marginTop: 8 }]} />
+                <Text style={[styles.editFormLabel, { color: THEME.textDim }]}>RENAME</Text>
                 <TextInput
                   style={styles.editFormInput}
                   value={goal.name}
@@ -726,73 +804,14 @@ export default function App() {
                   autoCapitalize="characters"
                   selectTextOnFocus
                 />
-                <View style={styles.sliderRow}>
-                  <View style={styles.sliderTrack} onLayout={e => { trackWidths.current[key] = e.nativeEvent.layout.width; }} {...pan.panHandlers}>
-                    <View style={[styles.sliderLine, { backgroundColor: node.color, opacity: 0.3 }]} />
-                    <View pointerEvents="none" style={[styles.sliderFill, { width: `${goal.value * 10}%`, backgroundColor: node.color }]} />
-                    <View pointerEvents="none" style={[styles.sliderHandle, { left: `${goal.value * 10}%`, marginLeft: -6 }]}>
-                      <View style={[styles.sliderHandleInner, { backgroundColor: '#38BDF8' }]} />
-                    </View>
-                  </View>
-                  <OrbitalValueBadge value={goal.value} color={node.color} size={48} />
-                </View>
-
-                {/* Desired Intent (Editable box) */}
-                <Text style={[styles.editFormLabel, { marginTop: 10 }]}>DESIRED INTENT</Text>
-                <View style={[styles.groundingPreview, { backgroundColor: 'rgba(255,255,255,0.03)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginBottom: 20 }]}>
-                  <TextInput
-                    style={[styles.groundingPreviewText, { color: theme.text, fontSize: 14, minHeight: 40, paddingTop: 0, paddingBottom: 0 }]}
-                    value={node.description}
-                    onChangeText={(text) => updateNode(node.id, { description: text })}
-                    placeholder="Define your desired intent..."
-                    placeholderTextColor={THEME.textDim}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                {/* Grounding Reference Text (Instant display) */}
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={[styles.groundingPreviewText, { color: node.color, fontSize: 11, fontWeight: '700', letterSpacing: 1 }]}>
-                    CURRENT GROUNDING: {goal.value <= 4 ? (goal.references?.[3] || 'LEVEL 3: NEGLECT') :
-                     goal.value >= 8 ? (goal.references?.[9] || 'LEVEL 9: PEAK') :
-                     (goal.references?.[6] || 'LEVEL 6: BASELINE')}
-                  </Text>
-                </View>
-
-                <View style={styles.addNodeDivider} />
-
-                <Text style={styles.editFormLabel}>REFERENCE POINTS</Text>
-                <View style={styles.referenceContainer}>
-                  {[3, 6, 9].map((lvl) => (
-                    <View key={lvl} style={styles.referenceField}>
-                      <View style={styles.referenceLabelRow}>
-                        <Text style={[styles.referenceLvl, { color: node.color }]}>LVL {lvl}</Text>
-                        <Text style={styles.referenceAnchorLabel}>
-                          {lvl === 3 ? 'NEGLECT' : lvl === 6 ? 'BASELINE' : 'PEAK'}
-                        </Text>
-                      </View>
-                      <TextInput
-                        style={styles.referenceInput}
-                        value={goal.references?.[lvl] || ''}
-                        onChangeText={(text) => {
-                          const newRefs = { ...(goal.references || {}), [lvl]: text };
-                          updateGoal(node.id, goal.id, { references: newRefs });
-                        }}
-                        placeholder={`What does a ${lvl} look like for ${goal.name}?`}
-                        placeholderTextColor={THEME.textDim}
-                        multiline
-                      />
-                    </View>
-                  ))}
-                </View>
 
                 <View style={{ height: 20 }} />
               </ScrollView>
-              {/* Bottom action row */}
+
+              {/* 5. DONE in node color — primary CTA */}
               <View style={{ marginTop: 12, gap: 10 }}>
-                <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0 }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
-                  <Text style={styles.coordEditDoneText}>DONE</Text>
+                <TouchableOpacity style={[styles.coordEditDoneBtn, { marginTop: 0, borderColor: node.color }]} onPress={() => setEditingCoordinate(null)} activeOpacity={0.7}>
+                  <Text style={[styles.coordEditDoneText, { color: node.color }]}>DONE</Text>
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
                   <TouchableOpacity onPress={() => { if (editingCoordinate) { archiveGoal(editingCoordinate.nodeId, editingCoordinate.goalId); setEditingCoordinate(null); } }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
@@ -809,164 +828,168 @@ export default function App() {
       })()}
 
       {/* Edit action overlay */}
-      {!!editingAction && (
-        <View style={styles.infoOverlay} pointerEvents="box-none">
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} activeOpacity={1} />
-          <View style={styles.taskEditCard} pointerEvents="auto">
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardHeaderTitle}>EDIT ACTION</Text>
-              <TouchableOpacity onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} style={styles.cardHeaderClose} activeOpacity={0.7}>
-                <Text style={styles.cardHeaderCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-              {/* Title */}
-              <Text style={styles.editFormLabel}>TITLE</Text>
-              <TextInput
-                style={[styles.editFormInput, { color: '#94a3b8' }]}
-                value={editForm.title}
-                onChangeText={t => setEditForm(f => ({ ...f, title: t }))}
-                placeholderTextColor={THEME.textDim}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-
-              {/* Effort */}
-              <Text style={styles.editFormLabel}>EFFORT</Text>
-              <View style={[styles.effortPickerRow, { marginBottom: 20 }]}>
-                {(['easy', 'medium', 'heavy'] as const).map(level => {
-                  const sel = editFormEffort === level;
-                  return (
-                    <TouchableOpacity
-                      key={level}
-                      style={[styles.effortPickerBtn, sel && { borderColor: THEME.accent, backgroundColor: 'rgba(56,189,248,0.1)' }]}
-                      onPress={() => setEditFormEffort(level)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.effortPickerBtnText, { color: sel ? THEME.accent : THEME.textDim }]}>{level.toUpperCase()}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+      {!!editingAction && (() => {
+        const selNode = nodes.find(n => n.id === editForm.nodeId);
+        const nodeColor = selNode?.color || 'rgba(255,255,255,0.3)';
+        const coords = selNode?.goals.filter(g => !g.archived) || [];
+        const selCoord = coords.find(g => g.id === editForm.goalId);
+        return (
+          <View style={styles.infoOverlay} pointerEvents="box-none">
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} activeOpacity={1} />
+            <View style={styles.taskEditCard} pointerEvents="auto">
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardHeaderTitle}>EDIT ACTION</Text>
+                <TouchableOpacity onPress={() => { setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }} style={styles.cardHeaderClose} activeOpacity={0.7}>
+                  <Text style={styles.cardHeaderCloseText}>✕</Text>
+                </TouchableOpacity>
               </View>
+              <ScrollView style={styles.taskEditScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-              {/* Node dropdown */}
-              <Text style={styles.editFormLabel}>NODE</Text>
-              {(() => {
-                const selNode = nodes.find(n => n.id === editForm.nodeId);
-                return (
-                  <View style={{ marginBottom: 20 }}>
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '55' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}
-                      onPress={() => { setNodeDropdownOpen(v => !v); setCoordDropdownOpen(false); }}
-                      activeOpacity={0.8}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        {selNode && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selNode.color }} />}
-                        <Text style={{ color: selNode ? selNode.color : THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>
-                          {selNode ? selNode.name : 'Select node…'}
-                        </Text>
-                      </View>
-                      <Text style={{ color: THEME.textDim, fontSize: 10 }}>{nodeDropdownOpen ? '▲' : '▼'}</Text>
-                    </TouchableOpacity>
-                    {nodeDropdownOpen && (
-                      <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
-                        {nodes.map((n, i) => (
-                          <TouchableOpacity
-                            key={n.id}
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < nodes.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.nodeId === n.id ? n.color + '14' : 'transparent' }}
-                            onPress={() => { setEditForm(f => ({ ...f, nodeId: n.id, goalId: n.goals[0]?.id || '' })); setNodeDropdownOpen(false); }}
-                            activeOpacity={0.7}
-                          >
-                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: n.color }} />
-                            <Text style={{ color: editForm.nodeId === n.id ? n.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{n.name}</Text>
-                            {editForm.nodeId === n.id && <Text style={{ marginLeft: 'auto', color: n.color, fontSize: 11 }}>✓</Text>}
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })()}
+                {/* 1. Title — primary field, larger weight */}
+                <Text style={styles.editFormLabel}>TITLE</Text>
+                <TextInput
+                  style={[styles.editFormInput, { fontSize: 17, letterSpacing: 0.3, color: 'white' }]}
+                  value={editForm.title}
+                  onChangeText={t => setEditForm(f => ({ ...f, title: t }))}
+                  placeholderTextColor={THEME.textDim}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
 
-              {/* Coordinate dropdown */}
-              <Text style={styles.editFormLabel}>COORDINATE</Text>
-              {(() => {
-                const selNode = nodes.find(n => n.id === editForm.nodeId);
-                const coords = selNode?.goals.filter(g => !g.archived) || [];
-                const selCoord = coords.find(g => g.id === editForm.goalId);
-                return (
-                  <View style={{ marginBottom: 20 }}>
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '44' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', opacity: selNode ? 1 : 0.5 }}
-                      onPress={() => { if (selNode) { setCoordDropdownOpen(v => !v); setNodeDropdownOpen(false); } }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={{ color: selCoord ? (selNode?.color || '#f0f4ff') : THEME.textDim, fontSize: 13, fontWeight: '600' }}>
-                        {selCoord ? selCoord.name : 'Select coordinate…'}
+                {/* 2. Effort — selected pill in node color */}
+                <Text style={styles.editFormLabel}>EFFORT</Text>
+                <View style={[styles.effortPickerRow, { marginBottom: 20 }]}>
+                  {(['easy', 'medium', 'heavy'] as const).map(level => {
+                    const sel = editFormEffort === level;
+                    return (
+                      <TouchableOpacity
+                        key={level}
+                        style={[styles.effortPickerBtn, sel && { borderColor: nodeColor, backgroundColor: nodeColor + '18' }]}
+                        onPress={() => setEditFormEffort(level)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.effortPickerBtnText, { color: sel ? nodeColor : THEME.textDim }]}>{level.toUpperCase()}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* 3. Node dropdown */}
+                <Text style={styles.editFormLabel}>NODE</Text>
+                <View style={{ marginBottom: 20 }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '55' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)' }}
+                    onPress={() => { setNodeDropdownOpen(v => !v); setCoordDropdownOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      {selNode && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selNode.color }} />}
+                      <Text style={{ color: selNode ? selNode.color : THEME.textDim, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 }}>
+                        {selNode ? selNode.name : 'Select node…'}
                       </Text>
-                      <Text style={{ color: THEME.textDim, fontSize: 10 }}>{coordDropdownOpen ? '▲' : '▼'}</Text>
-                    </TouchableOpacity>
-                    {coordDropdownOpen && selNode && (
-                      <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
-                        {coords.map((g, i) => (
-                          <TouchableOpacity
-                            key={g.id}
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < coords.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.goalId === g.id ? selNode.color + '14' : 'transparent' }}
-                            onPress={() => { setEditForm(f => ({ ...f, goalId: g.id })); setCoordDropdownOpen(false); }}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={{ flex: 1, color: editForm.goalId === g.id ? selNode.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{g.name}</Text>
-                            {editForm.goalId === g.id && <Text style={{ color: selNode.color, fontSize: 11 }}>✓</Text>}
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })()}
-
-              {/* Priority */}
-              <TouchableOpacity style={[styles.taskEditFocusRow, { marginBottom: 20 }]} onPress={() => setEditForm(f => ({ ...f, isPriority: !f.isPriority }))} activeOpacity={0.8}>
-                <Svg width={18} height={18} viewBox="0 0 24 24">
-                  {editForm.isPriority ? (
-                    <Path fill={THEME.accent} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  ) : (
-                    <Path fill="none" stroke={THEME.textDim} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </View>
+                    <Text style={{ color: THEME.textDim, fontSize: 10 }}>{nodeDropdownOpen ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  {nodeDropdownOpen && (
+                    <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
+                      {nodes.map((n, i) => (
+                        <TouchableOpacity
+                          key={n.id}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < nodes.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.nodeId === n.id ? n.color + '14' : 'transparent' }}
+                          onPress={() => { setEditForm(f => ({ ...f, nodeId: n.id, goalId: n.goals[0]?.id || '' })); setNodeDropdownOpen(false); }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: n.color }} />
+                          <Text style={{ color: editForm.nodeId === n.id ? n.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{n.name}</Text>
+                          {editForm.nodeId === n.id && <Text style={{ marginLeft: 'auto', color: n.color, fontSize: 11 }}>✓</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   )}
-                </Svg>
-                <Text style={{ marginLeft: 8, color: editForm.isPriority ? THEME.accent : THEME.textDim, fontSize: 12, fontWeight: '700', letterSpacing: 1.5 }}>
-                  {editForm.isPriority ? 'PRIORITY' : 'SET AS PRIORITY'}
-                </Text>
-              </TouchableOpacity>
+                </View>
 
-              {/* Notes */}
-              <Text style={styles.editFormLabel}>NOTES</Text>
-              <TextInput style={[styles.taskEditNotes, { marginBottom: 20 }]} value={editForm.notes} onChangeText={t => setEditForm(f => ({ ...f, notes: t }))} placeholder="Add notes…" placeholderTextColor={THEME.textDim} multiline numberOfLines={3} />
+                {/* 4. Coordinate dropdown */}
+                <Text style={styles.editFormLabel}>COORDINATE</Text>
+                <View style={{ marginBottom: 20 }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: selNode ? selNode.color + '44' : 'rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.04)', opacity: selNode ? 1 : 0.5 }}
+                    onPress={() => { if (selNode) { setCoordDropdownOpen(v => !v); setNodeDropdownOpen(false); } }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: selCoord ? nodeColor : THEME.textDim, fontSize: 13, fontWeight: '600' }}>
+                      {selCoord ? selCoord.name : 'Select coordinate…'}
+                    </Text>
+                    <Text style={{ color: THEME.textDim, fontSize: 10 }}>{coordDropdownOpen ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  {coordDropdownOpen && selNode && (
+                    <View style={{ marginTop: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden', backgroundColor: 'rgba(10,18,36,0.98)' }}>
+                      {coords.map((g, i) => (
+                        <TouchableOpacity
+                          key={g.id}
+                          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: i < coords.length - 1 ? 0.5 : 0, borderBottomColor: 'rgba(255,255,255,0.06)', backgroundColor: editForm.goalId === g.id ? selNode.color + '14' : 'transparent' }}
+                          onPress={() => { setEditForm(f => ({ ...f, goalId: g.id })); setCoordDropdownOpen(false); }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={{ flex: 1, color: editForm.goalId === g.id ? selNode.color : '#f0f4ff', fontSize: 13, fontWeight: '600' }}>{g.name}</Text>
+                          {editForm.goalId === g.id && <Text style={{ color: selNode.color, fontSize: 11 }}>✓</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
 
-            </ScrollView>
+                {/* 5. Notes — inputBox style, matches coord edit card */}
+                <Text style={styles.editFormLabel}>NOTES</Text>
+                <View style={[styles.inputBox, { marginBottom: 16 }]}>
+                  <TextInput
+                    style={[styles.inputBoxText, { minHeight: 72 }]}
+                    value={editForm.notes}
+                    onChangeText={t => setEditForm(f => ({ ...f, notes: t }))}
+                    placeholder="Add notes…"
+                    placeholderTextColor={THEME.textDim}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
 
-            {/* Bottom actions */}
-            <View style={{ marginTop: 12, gap: 10, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.07)', paddingTop: 12 }}>
-              <TouchableOpacity
-                style={[styles.coordEditDoneBtn, { marginTop: 0 }]}
-                onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.coordEditDoneText}>SAVE</Text>
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
-                <TouchableOpacity onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
-                  <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
+                {/* Priority — moved below notes, secondary concern */}
+                <TouchableOpacity style={[styles.taskEditFocusRow, { marginBottom: 8 }]} onPress={() => setEditForm(f => ({ ...f, isPriority: !f.isPriority }))} activeOpacity={0.8}>
+                  <Svg width={16} height={16} viewBox="0 0 24 24">
+                    {editForm.isPriority ? (
+                      <Path fill={nodeColor} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    ) : (
+                      <Path fill="none" stroke={THEME.textDim} strokeWidth="1.5" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    )}
+                  </Svg>
+                  <Text style={{ marginLeft: 8, color: editForm.isPriority ? nodeColor : THEME.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 }}>
+                    {editForm.isPriority ? 'PRIORITY' : 'SET AS PRIORITY'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
-                  <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
+
+              </ScrollView>
+
+              {/* Bottom actions */}
+              <View style={{ marginTop: 12, gap: 10, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.07)', paddingTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.coordEditDoneBtn, { marginTop: 0, borderColor: nodeColor }]}
+                  onPress={() => { saveActionEdit(editingAction, { ...editForm, effort: editFormEffort }); setEditingAction(null); setNodeDropdownOpen(false); setCoordDropdownOpen(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.coordEditDoneText, { color: nodeColor }]}>SAVE</Text>
                 </TouchableOpacity>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                  <TouchableOpacity onPress={() => { archiveAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleArchiveBtn} activeOpacity={0.6}>
+                    <Text style={styles.subtleArchiveBtnText}>ARCHIVE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { deleteAction(editingAction.nodeId, editingAction.goalId, editingAction.actionId); setEditingAction(null); }} style={styles.subtleDeleteBtn} activeOpacity={0.6}>
+                    <Text style={styles.subtleDeleteBtnText}>DELETE</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
-        </View>
-      )}
+        );
+      })()}
 
       {/* Auth modal */}
       <Modal visible={authOpen} animationType="slide" transparent>
@@ -1220,10 +1243,11 @@ const styles = StyleSheet.create({
   // Slider (shared by coord edit)
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
   sliderTrack: { flex: 1, height: 24, justifyContent: 'center' },
-  sliderLine: { height: 2, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' },
-  sliderFill: { position: 'absolute', left: 0, top: 11, height: 2, opacity: 0.6 },
-  sliderHandle: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent', borderWidth: 2, borderColor: '#38BDF8', top: 6, justifyContent: 'center', alignItems: 'center', shadowColor: '#38BDF8', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10 },
-  sliderHandleInner: { width: 6, height: 6, borderRadius: 3 },
+  sliderLine: { height: 3, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)' },
+  sliderFill: { position: 'absolute', left: 0, top: 10, height: 3, opacity: 0.6 },
+  sliderHandle: { position: 'absolute', width: 18, height: 18, borderRadius: 9, backgroundColor: 'transparent', borderWidth: 2, top: 3, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 12 },
+  sliderHandleInner: { width: 8, height: 8, borderRadius: 4 },
+  coordScore: { fontSize: 26, fontWeight: '200', letterSpacing: -0.5, minWidth: 34, textAlign: 'right' },
   valueCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: THEME.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
   valueCircleText: { fontSize: 22, fontWeight: '200' },
 
@@ -1278,9 +1302,26 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 12,
   },
+  // Shared multiline input box (Coordinate card: desired intent + reference fields)
+  inputBox: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  inputBoxText: {
+    color: 'white',
+    fontSize: 13,
+    lineHeight: 18,
+    padding: 0,
+    textAlignVertical: 'top',
+  },
   referenceField: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
     padding: 12,
   },
   referenceLabelRow: {
@@ -1293,6 +1334,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 2,
+    color: 'rgba(255,255,255,0.4)',
   },
   referenceAnchorLabel: {
     fontSize: 9,
@@ -1305,7 +1347,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     padding: 0,
+    textAlignVertical: 'top',
   },
+  // Node intent field — editorial style, distinct from regular form inputs
+  intentInput: { color: 'white', fontSize: 18, fontWeight: '300', fontStyle: 'italic', lineHeight: 28, paddingLeft: 14, paddingRight: 0, paddingTop: 0, paddingBottom: 0, borderLeftWidth: 2, marginBottom: 20, minHeight: 64 },
+
+  // Evaluate label above sliders
+  evaluateLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 2, marginTop: 16, marginBottom: 4 },
+
   // Card header (shared: coordinate edit, action edit)
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.08)' },
   cardHeaderTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 3, color: 'rgba(255,255,255,0.35)' },

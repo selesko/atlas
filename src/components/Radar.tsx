@@ -112,7 +112,8 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
             const cy = CENTER + radius * Math.sin(angle);
             const isCompleted = act.completed;
             const isActive = !activeNodeId || activeNodeId === act.nodeId;
-            
+            const effortRadius = act.effort === 'heavy' ? 10 : act.effort === 'medium' ? 7 : 5;
+
             const color = isActive ? act.nodeColor : theme.divider;
             const fill = color;
             const opacity = isActive ? 1 : 0.2;
@@ -138,12 +139,12 @@ export function Radar({ nodes, view, theme, activeNodeId, onEntityPress, onEmpty
                   />
                 )}
                 
-                <Circle 
-                  cx={cx} 
-                  cy={cy} 
-                  r={isCompleted ? 9 : 6} 
-                  fill={fill} 
-                  opacity={opacity} 
+                <Circle
+                  cx={cx}
+                  cy={cy}
+                  r={isCompleted ? effortRadius + 2 : effortRadius}
+                  fill={fill}
+                  opacity={opacity}
                   pointerEvents="none"
                 />
               </G>
